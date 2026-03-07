@@ -8,6 +8,34 @@ import { broadcastBid } from "@/lib/firebaseUtils";
 
 export const dynamic = "force-dynamic";
 
+// GET bids for a specific harvest (used by farmer to see incoming bids)
+export async function GET(req: Request) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+        }
+
+        const { searchParams } = new URL(req.url);
+        const harvestId = searchParams.get("harvestId");
+
+        if (!harvestId) {
+            return NextResponse.json({ message: "harvestId is required" }, { status: 400 });
+        }
+
+        await dbConnect();
+        const bids = await Bid.find({ harvestId })
+            .populate("mandiOwnerId", "name email")
+            .sort({ amount: -1 }); // highest first
+
+        return NextResponse.json(bids, { status: 200 });
+    } catch (error: any) {
+        console.error("Error fetching bids:", error);
+        return NextResponse.json({ message: "Failed to fetch bids" }, { status: 500 });
+    }
+}
+
+// POST a new bid (mandi owner)
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);

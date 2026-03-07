@@ -25,19 +25,25 @@ export default function Home() {
           ProduceLink
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
-          <Link className="text-sm font-medium hover:text-green-600 transition-colors" href="#">
+          <Link className="text-sm font-medium hover:text-green-600 transition-colors" href="/marketplace">
             Marketplace
           </Link>
-          <Link className="text-sm font-medium hover:text-green-600 transition-colors" href="#">
+          <Link className="text-sm font-medium hover:text-green-600 transition-colors" href="#about">
             About Us
           </Link>
           <div className="flex items-center gap-2 ml-4">
-             <Button variant="outline" asChild>
-              <Link href="/login">Login</Link>
-             </Button>
-             <Button className="bg-green-600 hover:bg-green-700 text-white" asChild>
-              <Link href="/register">Sign Up</Link>
-             </Button>
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center text-sm font-medium border border-slate-300 rounded-lg px-3 h-8 hover:bg-slate-100 transition-colors"
+            >
+              Login
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex items-center justify-center text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 h-8 transition-colors"
+            >
+              Sign Up
+            </Link>
           </div>
         </nav>
       </header>
@@ -47,7 +53,7 @@ export default function Home() {
             <div className="flex flex-col items-center space-y-4 text-center">
               <div className="space-y-2 max-w-3xl">
                 <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-                  Empowering Farmers, <br/>
+                  Empowering Farmers, <br />
                   <span className="text-green-600 dark:text-green-500">Connecting Markets.</span>
                 </h1>
                 <p className="mx-auto max-w-[700px] text-slate-500 md:text-xl dark:text-slate-400 pt-4">
@@ -60,13 +66,41 @@ export default function Home() {
                   <Link href="/register">Get Started Now</Link>
                 </Button>
                 <Button variant="outline" className="px-8 py-6 text-lg rounded-full" asChild>
-                    <Link href="/marketplace">View Live Markets</Link>
+                  <Link href="/marketplace">View Live Markets</Link>
                 </Button>
               </div>
             </div>
           </div>
         </section>
+
+        {/* About Section */}
+        <section id="about" className="w-full py-16 bg-white dark:bg-slate-900 border-t">
+          <div className="container px-4 md:px-6 mx-auto">
+            <h2 className="text-3xl font-bold text-center mb-12">How ProduceLink Works</h2>
+            <div className="grid gap-8 md:grid-cols-3 text-center">
+              <div className="space-y-3">
+                <div className="text-5xl">🌾</div>
+                <h3 className="text-xl font-bold">Farmers List Harvests</h3>
+                <p className="text-slate-500">Farmers enter their crop details, quantity, and a base price. AI-powered insights help them set the right price.</p>
+              </div>
+              <div className="space-y-3">
+                <div className="text-5xl">🏷️</div>
+                <h3 className="text-xl font-bold">Mandi Owners Bid</h3>
+                <p className="text-slate-500">Mandi owners browse available produce and place competitive bids. The highest bid wins — transparently and in real-time.</p>
+              </div>
+              <div className="space-y-3">
+                <div className="text-5xl">🚛</div>
+                <h3 className="text-xl font-bold">Transporters Deliver</h3>
+                <p className="text-slate-500">Transporters pick up delivery requests and track jobs from pickup to drop-off — all within the platform.</p>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
+
+      <footer className="border-t py-6 text-center text-sm text-slate-500">
+        © 2026 ProduceLink. Built for farmers, by builders.
+      </footer>
     </div>
   );
 }
