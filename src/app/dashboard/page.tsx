@@ -1,31 +1,27 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { redirect } from "next/navigation";
+"use client";
 
-export default async function DashboardPage() {
-    const session = await getServerSession(authOptions);
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 
-    if (!session) {
-        redirect("/login");
-    }
+export default function DashboardPage() {
+    const { user, loading } = useAuth();
+    const router = useRouter();
 
-    const role = session.user?.role;
+    useEffect(() => {
+        if (loading) return;
+        if (!user) {
+            router.replace("/login");
+            return;
+        }
+        if (user.role === "farmer") router.replace("/dashboard/farmer");
+        else if (user.role === "mandi_owner") router.replace("/dashboard/mandi");
+        else if (user.role === "transporter") router.replace("/dashboard/transporter");
+    }, [user, loading, router]);
 
-    if (role === "farmer") {
-        redirect("/dashboard/farmer");
-    } else if (role === "mandi_owner") {
-        redirect("/dashboard/mandi");
-    } else if (role === "transporter") {
-        redirect("/dashboard/transporter");
-    }
-
-    // Fallback if role is missing or invalid
     return (
-        <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="text-center">
-                <h1 className="text-2xl font-bold text-red-600">Error: Invalid Role</h1>
-                <p className="text-slate-600 mt-2">Cannot determine your user role.</p>
-            </div>
+        <div className="flex min-h-screen items-center justify-center bg-white">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-neutral-300 border-t-black" />
         </div>
     );
 }

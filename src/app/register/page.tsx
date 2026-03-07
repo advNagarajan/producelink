@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import Link from "next/link";
+
 export default function Register() {
     const router = useRouter();
     const [formData, setFormData] = useState({
@@ -43,13 +45,16 @@ export default function Register() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
-            <div className="w-full max-w-md space-y-8 bg-white dark:bg-slate-900 p-8 rounded-xl shadow-lg border">
+        <div className="flex min-h-screen items-center justify-center bg-white p-4">
+            <div className="w-full max-w-md space-y-8 p-8">
                 <div className="text-center">
-                    <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                    <Link href="/" className="inline-block mb-6 text-black font-semibold text-xl tracking-tight">
+                        ProduceLink
+                    </Link>
+                    <h2 className="text-3xl font-bold tracking-tight text-black">
                         Create an account
                     </h2>
-                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                    <p className="mt-2 text-sm text-neutral-500">
                         Join ProduceLink today.
                     </p>
                 </div>
@@ -93,11 +98,11 @@ export default function Register() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="role">I am a...</Label>
+                            <Label htmlFor="role">I am a</Label>
                             <select
                                 id="role"
                                 name="role"
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="flex h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-black focus:ring-1 focus:ring-black"
                                 value={formData.role}
                                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                             >
@@ -108,11 +113,18 @@ export default function Register() {
                         </div>
                     </div>
 
-                    {error && <div className="text-red-500 text-sm font-medium">{error}</div>}
+                    {error && <div className="text-red-600 text-sm font-medium">{error}</div>}
 
-                    <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={loading}>
-                        {loading ? "Registering..." : "Sign up"}
+                    <Button type="submit" className="w-full bg-black hover:bg-neutral-800 text-white h-11 rounded-full text-sm" disabled={loading}>
+                        {loading ? "Creating account..." : "Create Account"}
                     </Button>
+
+                    <p className="text-center text-sm text-neutral-500 mt-4">
+                        Already have an account?{" "}
+                        <Link href="/login" className="text-black hover:underline font-medium">
+                            Sign in
+                        </Link>
+                    </p>
                 </form>
             </div>
         </div>

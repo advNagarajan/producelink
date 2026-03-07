@@ -3,103 +3,163 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="px-6 lg:px-8 h-16 flex items-center border-b bg-white dark:bg-slate-900 justify-between">
-        <Link className="flex items-center justify-center font-bold text-2xl text-green-600 dark:text-green-500" href="#">
-          <span className="sr-only">ProduceLink</span>
-          <svg
-            className="h-8 w-8 mr-2"
-            fill="none"
-            height="24"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-            width="24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
-            <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
-          </svg>
+    <div className="flex flex-col min-h-screen bg-white">
+      {/* Navigation */}
+      <header className="px-6 lg:px-8 h-16 flex items-center border-b border-neutral-200 bg-white/80 backdrop-blur-md sticky top-0 z-50 justify-between">
+        <Link className="flex items-center justify-center font-semibold text-xl tracking-tight text-black" href="/">
           ProduceLink
         </Link>
-        <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
-          <Link className="text-sm font-medium hover:text-green-600 transition-colors" href="/marketplace">
+        <nav className="ml-auto flex gap-6 items-center">
+          <Link className="text-sm font-medium text-neutral-600 hover:text-black transition-colors" href="/marketplace">
             Marketplace
           </Link>
-          <Link className="text-sm font-medium hover:text-green-600 transition-colors" href="#about">
-            About Us
+          <Link className="text-sm font-medium text-neutral-600 hover:text-black transition-colors" href="#how-it-works">
+            How It Works
           </Link>
-          <div className="flex items-center gap-2 ml-4">
+          <Link className="text-sm font-medium text-neutral-600 hover:text-black transition-colors" href="#about">
+            About
+          </Link>
+          <div className="flex items-center gap-3 ml-4">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center text-sm font-medium border border-slate-300 rounded-lg px-3 h-8 hover:bg-slate-100 transition-colors"
+              className="inline-flex items-center justify-center text-sm font-medium text-black border border-neutral-300 rounded-full px-4 h-9 hover:bg-neutral-50 transition-colors"
             >
-              Login
+              Sign In
             </Link>
             <Link
               href="/register"
-              className="inline-flex items-center justify-center text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 h-8 transition-colors"
+              className="inline-flex items-center justify-center text-sm font-medium bg-black text-white rounded-full px-4 h-9 hover:bg-neutral-800 transition-colors"
             >
-              Sign Up
+              Get Started
             </Link>
           </div>
         </nav>
       </header>
-      <main className="flex-1 flex items-center justify-center -mt-16">
-        <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48">
-          <div className="container px-4 md:px-6">
-            <div className="flex flex-col items-center space-y-4 text-center">
-              <div className="space-y-2 max-w-3xl">
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-                  Empowering Farmers, <br />
-                  <span className="text-green-600 dark:text-green-500">Connecting Markets.</span>
-                </h1>
-                <p className="mx-auto max-w-[700px] text-slate-500 md:text-xl dark:text-slate-400 pt-4">
-                  ProduceLink is the modern bidding platform connecting farmers directly to Mandi owners and transporters.
-                  Fair prices, transparent bidding, and AI-powered market insights.
-                </p>
+
+      <main className="flex-1">
+        {/* Hero */}
+        <section className="w-full py-24 md:py-32 lg:py-44">
+          <div className="max-w-4xl mx-auto px-6 text-center">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-black leading-[1.08]">
+              Fair prices for farmers.
+              <br />
+              <span className="text-neutral-400">Transparent markets for all.</span>
+            </h1>
+            <p className="mt-6 text-lg md:text-xl text-neutral-500 max-w-2xl mx-auto leading-relaxed">
+              ProduceLink connects farmers directly to mandi owners through competitive bidding.
+              No intermediaries. No exploitation. Just fair, transparent trade.
+            </p>
+            <div className="flex items-center justify-center gap-4 mt-10">
+              <Button className="bg-black hover:bg-neutral-800 text-white px-8 h-12 text-base rounded-full" asChild>
+                <Link href="/register">Start Trading</Link>
+              </Button>
+              <Button variant="outline" className="px-8 h-12 text-base rounded-full border-neutral-300 text-black hover:bg-neutral-50" asChild>
+                <Link href="/marketplace">View Marketplace</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* How It Works */}
+        <section id="how-it-works" className="w-full py-24 border-t border-neutral-200">
+          <div className="max-w-5xl mx-auto px-6">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-black">How ProduceLink Works</h2>
+              <p className="mt-4 text-neutral-500 text-lg max-w-xl mx-auto">Three simple steps to better prices and efficient logistics.</p>
+            </div>
+            <div className="grid gap-12 md:grid-cols-3">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-5">
+                  <span className="text-lg font-bold text-black">1</span>
+                </div>
+                <h3 className="text-lg font-semibold text-black mb-2">Farmers List Harvests</h3>
+                <p className="text-neutral-500 text-sm leading-relaxed">Enter crop type, quantity, quality grade, and set a base price. AI-powered insights help determine fair market value.</p>
               </div>
-              <div className="space-x-4 pt-8">
-                <Button className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 text-lg rounded-full" asChild>
-                  <Link href="/register">Get Started Now</Link>
-                </Button>
-                <Button variant="outline" className="px-8 py-6 text-lg rounded-full" asChild>
-                  <Link href="/marketplace">View Live Markets</Link>
-                </Button>
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-5">
+                  <span className="text-lg font-bold text-black">2</span>
+                </div>
+                <h3 className="text-lg font-semibold text-black mb-2">Mandi Owners Bid</h3>
+                <p className="text-neutral-500 text-sm leading-relaxed">Browse available produce and place competitive bids. Real-time updates ensure complete transparency in every transaction.</p>
+              </div>
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-5">
+                  <span className="text-lg font-bold text-black">3</span>
+                </div>
+                <h3 className="text-lg font-semibold text-black mb-2">Transporters Deliver</h3>
+                <p className="text-neutral-500 text-sm leading-relaxed">Accepted bids automatically generate transport requests. Transporters pick up and deliver produce efficiently.</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* About Section */}
-        <section id="about" className="w-full py-16 bg-white dark:bg-slate-900 border-t">
-          <div className="container px-4 md:px-6 mx-auto">
-            <h2 className="text-3xl font-bold text-center mb-12">How ProduceLink Works</h2>
-            <div className="grid gap-8 md:grid-cols-3 text-center">
-              <div className="space-y-3">
-                <div className="text-5xl">🌾</div>
-                <h3 className="text-xl font-bold">Farmers List Harvests</h3>
-                <p className="text-slate-500">Farmers enter their crop details, quantity, and a base price. AI-powered insights help them set the right price.</p>
+        {/* Features */}
+        <section className="w-full py-24 bg-neutral-50 border-t border-neutral-200">
+          <div className="max-w-5xl mx-auto px-6">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-black">Built for Every Stakeholder</h2>
+              <p className="mt-4 text-neutral-500 text-lg max-w-xl mx-auto">Whether you grow, trade, or transport — ProduceLink has you covered.</p>
+            </div>
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="bg-white rounded-2xl p-8 border border-neutral-200">
+                <h3 className="text-lg font-semibold text-black mb-3">For Farmers</h3>
+                <ul className="space-y-3 text-sm text-neutral-600">
+                  <li>List harvests with detailed crop information</li>
+                  <li>Get AI-powered pricing recommendations</li>
+                  <li>Review and accept the best bids</li>
+                </ul>
               </div>
-              <div className="space-y-3">
-                <div className="text-5xl">🏷️</div>
-                <h3 className="text-xl font-bold">Mandi Owners Bid</h3>
-                <p className="text-slate-500">Mandi owners browse available produce and place competitive bids. The highest bid wins — transparently and in real-time.</p>
+              <div className="bg-white rounded-2xl p-8 border border-neutral-200">
+                <h3 className="text-lg font-semibold text-black mb-3">For Mandi Owners</h3>
+                <ul className="space-y-3 text-sm text-neutral-600">
+                  <li>Browse live marketplace listings</li>
+                  <li>Place competitive bids in real time</li>
+                  <li>Track bid status and outcomes</li>
+                </ul>
               </div>
-              <div className="space-y-3">
-                <div className="text-5xl">🚛</div>
-                <h3 className="text-xl font-bold">Transporters Deliver</h3>
-                <p className="text-slate-500">Transporters pick up delivery requests and track jobs from pickup to drop-off — all within the platform.</p>
+              <div className="bg-white rounded-2xl p-8 border border-neutral-200">
+                <h3 className="text-lg font-semibold text-black mb-3">For Transporters</h3>
+                <ul className="space-y-3 text-sm text-neutral-600">
+                  <li>View available delivery requests</li>
+                  <li>Accept and manage transport jobs</li>
+                  <li>Update delivery status in real time</li>
+                </ul>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* About */}
+        <section id="about" className="w-full py-24 border-t border-neutral-200">
+          <div className="max-w-3xl mx-auto px-6 text-center">
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-black mb-6">About ProduceLink</h2>
+            <p className="text-neutral-500 text-lg leading-relaxed mb-6">
+              In India, farmers often receive lower profits due to limited access to competitive markets,
+              price exploitation, and inefficient post-harvest logistics. ProduceLink addresses these
+              challenges by creating a transparent, technology-driven marketplace.
+            </p>
+            <p className="text-neutral-500 text-lg leading-relaxed">
+              Our platform introduces competitive bidding, optional verification systems, buyer feedback,
+              and integrated transport coordination — all designed to increase farmer profitability,
+              reduce wastage, and create a more equitable agricultural ecosystem.
+            </p>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="w-full py-24 bg-black text-white">
+          <div className="max-w-3xl mx-auto px-6 text-center">
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Ready to join?</h2>
+            <p className="text-neutral-400 text-lg mb-8">Create a free account and start trading today.</p>
+            <Button className="bg-white text-black hover:bg-neutral-200 px-8 h-12 text-base rounded-full font-medium" asChild>
+              <Link href="/register">Create Your Account</Link>
+            </Button>
           </div>
         </section>
       </main>
 
-      <footer className="border-t py-6 text-center text-sm text-slate-500">
-        © 2026 ProduceLink. Built for farmers, by builders.
+      <footer className="border-t border-neutral-200 py-8 text-center text-sm text-neutral-400">
+        2026 ProduceLink. Built for farmers, by builders.
       </footer>
     </div>
   );
