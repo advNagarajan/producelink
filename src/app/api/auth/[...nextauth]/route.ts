@@ -4,6 +4,8 @@ import dbConnect from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 
+export const dynamic = "force-dynamic";
+
 export const authOptions = {
     providers: [
         CredentialsProvider({

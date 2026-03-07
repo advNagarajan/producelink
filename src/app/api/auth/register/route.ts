@@ -3,6 +3,8 @@ import dbConnect from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
     try {
         const { name, email, password, role, farmLocation, businessName, vehicleType } = await req.json();
