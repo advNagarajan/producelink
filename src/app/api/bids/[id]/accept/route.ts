@@ -58,7 +58,7 @@ export async function POST(
             harvestId: harvest._id,
             requesterId: session.user.id,
             pickupLocation: harvest.location,
-            dropoffLocation: "To be specified by mandi owner", // placeholder
+            dropoffLocation: bid.dropoffLocation,
             status: "pending",
         });
 

@@ -13,6 +13,7 @@ const BidSchema: Schema = new Schema(
         harvestId: { type: Schema.Types.ObjectId, ref: "Harvest", required: true },
         mandiOwnerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
         amount: { type: Number, required: true },
+        dropoffLocation: { type: String, required: true },
         status: {
             type: String,
             required: true,

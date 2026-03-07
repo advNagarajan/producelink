@@ -18,8 +18,13 @@ export async function GET(req: Request) {
 
         let requests;
         if (session.user?.role === "transporter") {
-            // Transporters see all pending requests
-            requests = await DeliveryRequest.find({ status: "pending" })
+            // Transporters see all pending requests OR requests assigned to them
+            requests = await DeliveryRequest.find({
+                $or: [
+                    { status: "pending" },
+                    { transporterId: session.user.id }
+                ]
+            })
                 .populate("harvestId", "cropType quantity location")
                 .populate("requesterId", "name")
                 .sort({ createdAt: -1 });

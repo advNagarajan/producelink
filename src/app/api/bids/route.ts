@@ -44,9 +44,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
         }
 
-        const { harvestId, amount } = await req.json();
+        const { harvestId, amount, dropoffLocation } = await req.json();
 
-        if (!harvestId || !amount) {
+        if (!harvestId || !amount || !dropoffLocation) {
             return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
         }
 
@@ -71,6 +71,7 @@ export async function POST(req: Request) {
             harvestId,
             mandiOwnerId: session.user.id,
             amount,
+            dropoffLocation,
             status: "pending",
         });
 

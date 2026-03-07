@@ -96,39 +96,44 @@ export default function TransporterDashboard() {
                     </p>
                 </div>
                 <div className="flex items-center gap-4">
+                    <Button variant="outline" size="sm" onClick={fetchRequests}>
+                        🔄 Refresh
+                    </Button>
                     <div className="flex gap-4 text-center">
-                        <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border">
+                        <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border shadow-sm">
                             <div className="text-2xl font-bold text-yellow-600">{pending.length}</div>
-                            <div className="text-xs text-slate-500">Available</div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider">Available</div>
                         </div>
-                        <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border">
+                        <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border shadow-sm">
                             <div className="text-2xl font-bold text-blue-600">{active.length}</div>
-                            <div className="text-xs text-slate-500">Active</div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider">Active</div>
                         </div>
-                        <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border">
+                        <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-lg border shadow-sm">
                             <div className="text-2xl font-bold text-green-600">{completed.length}</div>
-                            <div className="text-xs text-slate-500">Done</div>
+                            <div className="text-xs text-slate-500 uppercase tracking-wider">Done</div>
                         </div>
                     </div>
-                    <Button variant="outline" onClick={() => signOut()}>
+                    <Button variant="destructive" onClick={() => signOut({ callbackUrl: "/" })}>
                         Sign Out
                     </Button>
                 </div>
             </header>
 
             {loading ? (
-                <p>Loading requests...</p>
+                <div className="flex justify-center items-center h-64">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                </div>
             ) : (
                 <div className="space-y-8">
                     {/* Available Requests */}
                     <section>
                         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                            <span className="h-3 w-3 rounded-full bg-yellow-400 inline-block"></span>
+                            <span className="h-3 w-3 rounded-full bg-yellow-400 inline-block animate-pulse"></span>
                             Available Requests ({pending.length})
                         </h2>
                         {pending.length === 0 ? (
-                            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border text-center text-slate-500">
-                                No pending requests right now.
+                            <div className="bg-white dark:bg-slate-900 p-12 rounded-xl border border-dashed text-center text-slate-500">
+                                No pending requests right now. Check back soon!
                             </div>
                         ) : (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -145,6 +150,7 @@ export default function TransporterDashboard() {
                             </div>
                         )}
                     </section>
+                    {/* ... rest of the file ... */}
 
                     {/* Active Deliveries */}
                     {active.length > 0 && (

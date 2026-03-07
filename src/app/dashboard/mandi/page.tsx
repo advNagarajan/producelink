@@ -30,6 +30,7 @@ export default function MandiDashboard() {
     // Bidding State
     const [biddingHarvestId, setBiddingHarvestId] = useState<string | null>(null);
     const [bidAmount, setBidAmount] = useState("");
+    const [dropoffLocation, setDropoffLocation] = useState("");
     const [submittingBid, setSubmittingBid] = useState(false);
     const [bidError, setBidError] = useState("");
 
@@ -83,12 +84,13 @@ export default function MandiDashboard() {
             const res = await fetch("/api/bids", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ harvestId, amount: amountNum })
+                body: JSON.stringify({ harvestId, amount: amountNum, dropoffLocation })
             });
 
             if (res.ok) {
                 setBiddingHarvestId(null);
                 setBidAmount("");
+                setDropoffLocation("");
             } else {
                 const data = await res.json();
                 setBidError(data.message || "Failed to place bid");
@@ -171,6 +173,12 @@ export default function MandiDashboard() {
                                                 placeholder={`> ₹${harvest.latestBid || harvest.basePrice}`}
                                                 value={bidAmount}
                                                 onChange={(e) => setBidAmount(e.target.value)}
+                                            />
+                                            <Input
+                                                type="text"
+                                                placeholder="Drop-off Location"
+                                                value={dropoffLocation}
+                                                onChange={(e) => setDropoffLocation(e.target.value)}
                                             />
                                             <Button
                                                 className="bg-green-600 hover:bg-green-700"

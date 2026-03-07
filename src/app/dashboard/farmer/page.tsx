@@ -137,9 +137,28 @@ export default function FarmerDashboard() {
         try {
             const res = await fetch(`/api/bids/${bidId}/accept`, { method: "POST" });
             if (res.ok) {
-                fetchHarvests();
-                // refresh bids 
-                setBidsMap({});
+                // Update local state immediately for snappy UI
+                setHarvests((prev) => prev.map(harvest => {
+                    const bids = bidsMap[harvest._id] || [];
+                    if (bids.some(b => b._id === bidId)) {
+                        return { ...harvest, status: "sold" };
+                    }
+                    return harvest;
+                }));
+
+                // Clear bids for this harvest locally too
+                setBidsMap(prev => {
+                    const newMap = { ...prev };
+                    // find which harvest had this bid
+                    for (const hid in newMap) {
+                        if (newMap[hid].some(b => b._id === bidId)) {
+                            newMap[hid] = newMap[hid].map(b =>
+                                b._id === bidId ? { ...b, status: "accepted" } : { ...b, status: "rejected" }
+                            );
+                        }
+                    }
+                    return newMap;
+                });
             }
         } catch (err) {
             console.error("Failed to accept bid", err);
@@ -245,8 +264,8 @@ export default function FarmerDashboard() {
                                             <div className="flex items-center gap-2">
                                                 <h3 className="font-bold text-lg text-green-700 dark:text-green-400">{harvest.cropType}</h3>
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${harvest.status === "available" ? "bg-blue-100 text-blue-700" :
-                                                        harvest.status === "bidding" ? "bg-orange-100 text-orange-700" :
-                                                            "bg-gray-100 text-gray-600"
+                                                    harvest.status === "bidding" ? "bg-orange-100 text-orange-700" :
+                                                        "bg-gray-100 text-gray-600"
                                                     }`}>{harvest.status.toUpperCase()}</span>
                                             </div>
                                             <p className="text-sm text-slate-500">{harvest.location} · {harvest.quantity} kg · Grade {harvest.qualityGrade} · ₹{harvest.basePrice}/kg</p>

@@ -32,6 +32,11 @@ export async function PATCH(
             return NextResponse.json({ message: "Request not found" }, { status: 404 });
         }
 
+        // Security: If already accepted, only the assigned transporter can update it further
+        if (request.status !== "pending" && request.transporterId?.toString() !== session.user.id) {
+            return NextResponse.json({ message: "This request is already assigned to someone else" }, { status: 403 });
+        }
+
         request.status = status;
         if (status === "accepted") {
             request.transporterId = session.user.id as any;
