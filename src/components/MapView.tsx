@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, memo } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -10,7 +10,8 @@ interface MapViewProps {
     height?: string;
 }
 
-export default function MapView({ pickup, dropoff, height = "300px" }: MapViewProps) {
+// Optimized: Memoize component to prevent unnecessary re-renders
+function MapView({ pickup, dropoff, height = "300px" }: MapViewProps) {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<L.Map | null>(null);
 
@@ -73,3 +74,6 @@ export default function MapView({ pickup, dropoff, height = "300px" }: MapViewPr
         />
     );
 }
+
+// Optimized: Export memoized version
+export default memo(MapView);
