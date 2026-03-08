@@ -11,30 +11,68 @@ router = APIRouter()
 async def get_invoice(delivery_id: str, request: Request):
     user = await get_current_user(request)
 
-    delivery = await db.deliveryrequests.find_one({"_id": ObjectId(delivery_id)})
-    if not delivery:
+    # Optimized: Use aggregation pipeline to fetch all data in single query
+    pipeline = [
+        {"$match": {"_id": ObjectId(delivery_id)}},
+        {"$lookup": {
+            "from": "harvests",
+            "localField": "harvestId",
+            "foreignField": "_id",
+            "as": "harvest"
+        }},
+        {"$unwind": "$harvest"},
+        {"$lookup": {
+            "from": "bids",
+            "let": {"harvestId": "$harvestId"},
+            "pipeline": [
+                {"$match": {
+                    "$expr": {"$eq": ["$harvestId", "$$harvestId"]},
+                    "status": "accepted"
+                }}
+            ],
+            "as": "bid"
+        }},
+        {"$lookup": {
+            "from": "users",
+            "localField": "harvest.farmerId",
+            "foreignField": "_id",
+            "pipeline": [{"$project": {"name": 1, "email": 1, "farmLocation": 1}}],
+            "as": "farmer"
+        }},
+        {"$lookup": {
+            "from": "users",
+            "localField": "transporterId",
+            "foreignField": "_id",
+            "pipeline": [{"$project": {"name": 1, "email": 1}}],
+            "as": "transporter"
+        }},
+        {"$addFields": {
+            "bid": {"$arrayElemAt": ["$bid", 0]},
+            "farmer": {"$arrayElemAt": ["$farmer", 0]},
+            "transporter": {"$arrayElemAt": ["$transporter", 0]}
+        }}
+    ]
+    
+    result = await db.deliveryrequests.aggregate(pipeline).to_list(1)
+    if not result:
         raise HTTPException(status_code=404, detail="Delivery not found")
+    
+    delivery = result[0]
+    
     if delivery["status"] != "delivered":
         raise HTTPException(status_code=400, detail="Invoice only available for completed deliveries")
-
-    harvest = await db.harvests.find_one({"_id": delivery["harvestId"]})
-    if not harvest:
-        raise HTTPException(status_code=404, detail="Harvest not found")
-
-    # Find the accepted bid to get price info
-    bid = await db.bids.find_one({
-        "harvestId": harvest["_id"],
-        "status": "accepted",
-    })
-
-    farmer = await db.users.find_one({"_id": harvest["farmerId"]}, {"name": 1, "email": 1, "farmLocation": 1})
+    
+    harvest = delivery["harvest"]
+    bid = delivery.get("bid")
+    
+    # Lookup buyer if there's a bid
     buyer = None
     if bid:
-        buyer = await db.users.find_one({"_id": bid["mandiOwnerId"]}, {"name": 1, "email": 1, "businessName": 1})
-
-    transporter = None
-    if delivery.get("transporterId"):
-        transporter = await db.users.find_one({"_id": delivery["transporterId"]}, {"name": 1, "email": 1})
+        buyer_doc = await db.users.find_one(
+            {"_id": bid["mandiOwnerId"]},
+            {"name": 1, "email": 1, "businessName": 1}
+        )
+        buyer = serialize_doc(buyer_doc) if buyer_doc else None
 
     price_per_kg = bid["amount"] if bid else harvest["basePrice"]
     total = price_per_kg * harvest["quantity"]
@@ -49,7 +87,7 @@ async def get_invoice(delivery_id: str, request: Request):
         "total": total,
         "pickup": delivery["pickupLocation"],
         "dropoff": delivery["dropoffLocation"],
-        "farmer": serialize_doc(farmer) if farmer else None,
-        "buyer": serialize_doc(buyer) if buyer else None,
-        "transporter": serialize_doc(transporter) if transporter else None,
+        "farmer": serialize_doc(delivery.get("farmer")) if delivery.get("farmer") else None,
+        "buyer": buyer,
+        "transporter": serialize_doc(delivery.get("transporter")) if delivery.get("transporter") else None,
     }

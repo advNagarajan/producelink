@@ -1,15 +1,25 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/AuthProvider";
 import DashboardHeader from "@/components/DashboardHeader";
-import WeatherWidget from "@/components/WeatherWidget";
-import BulkHarvestForm from "@/components/BulkHarvestForm";
 import StarRating from "@/components/StarRating";
 import Link from "next/link";
+
+// Optimized: Lazy load heavy components
+const WeatherWidget = dynamic(() => import("@/components/WeatherWidget"), {
+    loading: () => <div className="h-20 animate-pulse bg-neutral-100 dark:bg-neutral-800 rounded-xl" />,
+    ssr: false,
+});
+
+const BulkHarvestForm = dynamic(() => import("@/components/BulkHarvestForm"), {
+    loading: () => <div className="h-40 animate-pulse bg-neutral-100 dark:bg-neutral-800 rounded-xl" />,
+    ssr: false,
+});
 
 interface Bid {
     _id: string;

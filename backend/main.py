@@ -6,6 +6,9 @@ from routes import notifications, ratings, chat, favorites, profile, invoice, we
 
 app = FastAPI(title="ProduceLink API")
 
+# Note: GZIP compression can be enabled at the web server level (nginx, etc.)
+# For local development, uvicorn handles basic compression
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],

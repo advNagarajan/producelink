@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "analyze": "ANALYZE=true npm run build",
+    "test:backend": "cd backend && python analyze_performance.py",
+    "test:benchmark": "cd backend && python benchmark_test.py",
+    "setup:indexes": "cd backend && python create_indexes.py"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
