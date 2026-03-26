@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/AuthProvider";
 import AppShell from "@/components/AppShell";
 import StarRating from "@/components/StarRating";
+import AIOpsAssistant from "@/components/AIOpsAssistant";
 import Link from "next/link";
 
 // Optimized: Lazy load heavy components
@@ -39,9 +40,26 @@ interface Harvest {
     qualityGrade: string;
     basePrice: number;
     location: string;
-    status: "available" | "bidding" | "sold";
+    status: "available" | "bidding" | "sold" | "under_review";
     createdAt: string;
 }
+
+type ListingForm = {
+    cropType: string;
+    quantity: string;
+    unit: "kg" | "quintal" | "ton" | "crates";
+    qualityGrade: "A" | "B" | "C" | "D";
+    basePrice: string;
+    harvestDate: string;
+    dispatchDateTime: string;
+    location: string;
+    pincode: string;
+    image1: string;
+    image2: string;
+    landSizeAcres: string;
+};
+
+const CROP_HINTS = ["tomato", "onion", "rice", "wheat", "potato"];
 
 interface DeliveryRequest {
     _id: string;
@@ -51,6 +69,17 @@ interface DeliveryRequest {
     status: "pending" | "accepted" | "in_transit" | "delivered";
     transporterId?: { _id: string; name: string };
     createdAt: string;
+}
+
+interface DemandAlert {
+    cropType: string;
+    qualityGrade: string;
+    nearbyState: string;
+    demandLevel: "very_high" | "high" | "medium" | "watchlist";
+    confidence: number;
+    demandScore: number;
+    recommendedAction: string;
+    why: string;
 }
 
 type Tab = "overview" | "listings" | "deliveries" | "bulk";
@@ -66,15 +95,105 @@ export default function FarmerDashboard() {
     const [activeTab, setActiveTab] = useState<Tab>("overview");
     const [filterStatus, setFilterStatus] = useState<string>("all");
 
-    const [formData, setFormData] = useState({
-        cropType: "", quantity: "", qualityGrade: "A", basePrice: "", location: "",
+    const [formData, setFormData] = useState<ListingForm>({
+        cropType: "", quantity: "", unit: "kg", qualityGrade: "A", basePrice: "", harvestDate: "", dispatchDateTime: "", location: "", pincode: "", image1: "", image2: "", landSizeAcres: "",
     });
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState("");
     const [formSuccess, setFormSuccess] = useState("");
     const [insight, setInsight] = useState("");
     const [loadingInsight, setLoadingInsight] = useState(false);
     const [ratingSubmitted, setRatingSubmitted] = useState<Record<string, boolean>>({});
+    const [selectedImageNames, setSelectedImageNames] = useState<string[]>([]);
+    const [demandAlerts, setDemandAlerts] = useState<DemandAlert[]>([]);
+    const [loadingDemandAlerts, setLoadingDemandAlerts] = useState(false);
+
+    const validateField = useCallback((name: keyof ListingForm, value: string, state: ListingForm) => {
+        if (name === "cropType") {
+            const v = value.trim().toLowerCase();
+            if (!v) return "Crop type is required";
+            if (!CROP_HINTS.includes(v) && v.length < 3) return "Use a valid produce name";
+        }
+        if (name === "quantity") {
+            const q = Number(value);
+            if (!value) return "Quantity is required";
+            if (!Number.isFinite(q) || q <= 0) return "Quantity must be greater than 0";
+        }
+        if (name === "basePrice") {
+            const p = Number(value);
+            if (!value) return "Price is required";
+            if (!Number.isFinite(p) || p <= 0) return "Price must be greater than 0";
+        }
+        if (name === "harvestDate") {
+            if (!value) return "Harvest date is required";
+            if (new Date(value).getTime() > Date.now()) return "Harvest date cannot be in future";
+        }
+        if (name === "location" && value.trim().length < 3) return "Location is required";
+        if (name === "pincode") {
+            if (!/^\d{6}$/.test(value.trim())) return "Pincode must be 6 digits";
+        }
+        if (name === "image1" || name === "image2") {
+            const v = value.trim().toLowerCase();
+            if (!v) return "Image is required";
+            if (!(v.endsWith(".jpg") || v.endsWith(".jpeg") || v.endsWith(".png") || v.endsWith(".webp") || v.startsWith("data:image/"))) {
+                return "Use jpg/jpeg/png/webp image URL or file path";
+            }
+        }
+        if (name === "dispatchDateTime" && ["tomato", "onion", "potato"].includes(state.cropType.trim().toLowerCase()) && !value) {
+            return "Dispatch date/time is required for perishable crops";
+        }
+        return "";
+    }, []);
+
+    const handleFieldChange = useCallback((name: keyof ListingForm, value: string) => {
+        setFormData((prev) => {
+            const next = { ...prev, [name]: value };
+            setFieldErrors((curr) => ({ ...curr, [name]: validateField(name, value, next) }));
+            return next;
+        });
+    }, [validateField]);
+
+    const fileToDataUrl = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(new Error("Failed to read image file"));
+            reader.readAsDataURL(file);
+        });
+
+    const handleImageFiles = useCallback(async (files: FileList | null) => {
+        if (!files || files.length < 2) {
+            setFieldErrors((prev) => ({ ...prev, image1: "Upload at least 2 images", image2: "Upload at least 2 images" }));
+            return;
+        }
+
+        const picked = Array.from(files).slice(0, 4);
+        for (const file of picked) {
+            const extOk = ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type);
+            if (!extOk) {
+                setFieldErrors((prev) => ({ ...prev, image1: "Only jpg/jpeg/png/webp allowed", image2: "Only jpg/jpeg/png/webp allowed" }));
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setFieldErrors((prev) => ({ ...prev, image1: "Each image must be <= 5MB", image2: "Each image must be <= 5MB" }));
+                return;
+            }
+        }
+
+        try {
+            const dataUrls = await Promise.all(picked.map(fileToDataUrl));
+            setSelectedImageNames(picked.map((f) => f.name));
+            setFormData((prev) => ({
+                ...prev,
+                image1: dataUrls[0] || "",
+                image2: dataUrls[1] || "",
+            }));
+            setFieldErrors((prev) => ({ ...prev, image1: "", image2: "" }));
+        } catch {
+            setFieldErrors((prev) => ({ ...prev, image1: "Failed to process images", image2: "Failed to process images" }));
+        }
+    }, []);
 
     const fetchHarvests = useCallback(async () => {
         try {
@@ -117,6 +236,24 @@ export default function FarmerDashboard() {
     }, [fetchHarvests, fetchDeliveries]);
 
     useEffect(() => {
+        const fetchDemandAlerts = async () => {
+            setLoadingDemandAlerts(true);
+            try {
+                const res = await fetch("/api/predict/demand-forecast-alerts?max_items=4&push_notifications=true");
+                if (res.ok) {
+                    const data = await res.json();
+                    setDemandAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+                }
+            } catch {
+                setDemandAlerts([]);
+            } finally {
+                setLoadingDemandAlerts(false);
+            }
+        };
+        fetchDemandAlerts();
+    }, []);
+
+    useEffect(() => {
         const biddingHarvests = harvests.filter((h) => h.status === "bidding" || h.status === "available");
         biddingHarvests.forEach((h) => fetchBidsForHarvest(h._id));
         const interval = setInterval(() => {
@@ -127,6 +264,10 @@ export default function FarmerDashboard() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!validateBeforeSubmit()) {
+            setFormError("Please correct highlighted fields before listing.");
+            return;
+        }
         setSubmitting(true);
         setFormError("");
         setFormSuccess("");
@@ -138,10 +279,14 @@ export default function FarmerDashboard() {
                     ...formData,
                     quantity: Number(formData.quantity),
                     basePrice: Number(formData.basePrice),
+                    landSizeAcres: formData.landSizeAcres ? Number(formData.landSizeAcres) : null,
+                    images: [formData.image1, formData.image2],
                 }),
             });
             if (res.ok) {
-                setFormData({ cropType: "", quantity: "", qualityGrade: "A", basePrice: "", location: "" });
+                setFormData({ cropType: "", quantity: "", unit: "kg", qualityGrade: "A", basePrice: "", harvestDate: "", dispatchDateTime: "", location: "", pincode: "", image1: "", image2: "", landSizeAcres: "" });
+                setFieldErrors({});
+                setSelectedImageNames([]);
                 setInsight("");
                 setFormSuccess("Harvest listed successfully.");
                 fetchHarvests();
@@ -179,6 +324,17 @@ export default function FarmerDashboard() {
             setLoadingInsight(false);
         }
     };
+
+    const validateBeforeSubmit = useCallback(() => {
+        const keys: (keyof ListingForm)[] = ["cropType", "quantity", "basePrice", "harvestDate", "location", "pincode", "image1", "image2", "dispatchDateTime"];
+        const nextErrors: Record<string, string> = {};
+        for (const key of keys) {
+            const err = validateField(key, formData[key], formData);
+            if (err) nextErrors[key] = err;
+        }
+        setFieldErrors(nextErrors);
+        return Object.keys(nextErrors).length === 0;
+    }, [formData, validateField]);
 
     const handleAcceptBid = async (bidId: string) => {
         setAccepting(bidId);
@@ -261,6 +417,8 @@ export default function FarmerDashboard() {
                     ))}
                 </div>
 
+                <AIOpsAssistant title="Farm AI Assistant" subtitle="Ask about your listings, bids, deliveries, and next best actions." />
+
                 {/* OVERVIEW TAB */}
                 {activeTab === "overview" && (
                     <div className="space-y-8">
@@ -314,6 +472,66 @@ export default function FarmerDashboard() {
                             <WeatherWidget location={harvests[0]?.location || "Delhi"} />
                         </div>
 
+                        {/* Demand Forecast Alerts */}
+                        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-6">
+                            <div className="flex items-center justify-between gap-3 mb-4">
+                                <div>
+                                    <h3 className="text-lg font-bold text-black dark:text-white">Produce Demand Forecast Alerts</h3>
+                                    <p className="text-sm text-neutral-500">Likely high-demand crop and grade opportunities in nearby markets.</p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full"
+                                    onClick={async () => {
+                                        setLoadingDemandAlerts(true);
+                                        try {
+                                            const res = await fetch("/api/predict/demand-forecast-alerts?max_items=4&push_notifications=true");
+                                            if (res.ok) {
+                                                const data = await res.json();
+                                                setDemandAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+                                            }
+                                        } finally {
+                                            setLoadingDemandAlerts(false);
+                                        }
+                                    }}
+                                >
+                                    Refresh Alerts
+                                </Button>
+                            </div>
+
+                            {loadingDemandAlerts ? (
+                                <div className="grid md:grid-cols-2 gap-3">
+                                    {Array.from({ length: 4 }).map((_, idx) => (
+                                        <div key={idx} className="h-24 rounded-xl bg-neutral-100 dark:bg-neutral-800 animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : demandAlerts.length === 0 ? (
+                                <div className="text-sm text-neutral-500">No strong demand spikes detected right now. Check again tomorrow.</div>
+                            ) : (
+                                <div className="grid md:grid-cols-2 gap-3">
+                                    {demandAlerts.map((alert) => (
+                                        <div key={`${alert.cropType}-${alert.qualityGrade}-${alert.demandLevel}`} className="rounded-xl border border-neutral-200 dark:border-neutral-700 p-4">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="font-semibold text-black dark:text-white">
+                                                    {alert.cropType} - Grade {alert.qualityGrade}
+                                                </div>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                    alert.demandLevel === "very_high" ? "bg-emerald-100 text-emerald-700" :
+                                                    alert.demandLevel === "high" ? "bg-teal-100 text-teal-700" :
+                                                    "bg-amber-100 text-amber-700"
+                                                }`}>
+                                                    {alert.demandLevel.replace("_", " ").toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-neutral-500 mb-1">{alert.nearbyState} - Confidence {alert.confidence}%</div>
+                                            <div className="text-xs text-neutral-500 mb-2">{alert.why}</div>
+                                            <div className="text-sm text-black dark:text-white">{alert.recommendedAction}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         {/* Quick actions + recent */}
                         <div className="grid lg:grid-cols-3 gap-6">
                             {/* List New Harvest Form */}
@@ -323,40 +541,101 @@ export default function FarmerDashboard() {
                                     <div className="space-y-1.5">
                                         <Label htmlFor="cropType">Crop Type</Label>
                                         <Input id="cropType" required placeholder="e.g., Wheat, Tomatoes"
-                                            value={formData.cropType} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, cropType: e.target.value })} />
+                                            value={formData.cropType} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("cropType", e.target.value)} />
+                                        {fieldErrors.cropType && <div className="text-xs text-red-600">{fieldErrors.cropType}</div>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <Label htmlFor="location">Location</Label>
                                         <Input id="location" required placeholder="City, State"
-                                            value={formData.location} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, location: e.target.value })} />
+                                            value={formData.location} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("location", e.target.value)} />
+                                        {fieldErrors.location && <div className="text-xs text-red-600">{fieldErrors.location}</div>}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="pincode">Pincode</Label>
+                                        <Input id="pincode" required placeholder="6-digit pincode"
+                                            value={formData.pincode} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("pincode", e.target.value)} />
+                                        {fieldErrors.pincode && <div className="text-xs text-red-600">{fieldErrors.pincode}</div>}
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1.5">
-                                            <Label htmlFor="quantity">Quantity (kg)</Label>
+                                            <Label htmlFor="quantity">Quantity</Label>
                                             <Input id="quantity" type="number" min="1" required
-                                                value={formData.quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, quantity: e.target.value })} />
+                                                value={formData.quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("quantity", e.target.value)} />
+                                            {fieldErrors.quantity && <div className="text-xs text-red-600">{fieldErrors.quantity}</div>}
                                         </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="unit">Unit</Label>
+                                            <select id="unit"
+                                                className="flex h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-black focus:ring-1 focus:ring-black"
+                                                value={formData.unit}
+                                                onChange={(e) => handleFieldChange("unit", e.target.value)}>
+                                                <option value="kg">kg</option>
+                                                <option value="quintal">quintal</option>
+                                                <option value="ton">ton</option>
+                                                <option value="crates">crates</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1.5">
                                             <Label htmlFor="qualityGrade">Grade</Label>
                                             <select id="qualityGrade"
                                                 className="flex h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-black focus:ring-1 focus:ring-black"
                                                 value={formData.qualityGrade}
-                                                onChange={(e) => setFormData({ ...formData, qualityGrade: e.target.value })}>
+                                                onChange={(e) => handleFieldChange("qualityGrade", e.target.value)}>
                                                 <option value="A">A (Premium)</option>
                                                 <option value="B">B (Standard)</option>
                                                 <option value="C">C (Fair)</option>
+                                                <option value="D">D (Low)</option>
                                             </select>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="harvestDate">Harvest Date</Label>
+                                            <Input id="harvestDate" type="date" required
+                                                value={formData.harvestDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("harvestDate", e.target.value)} />
+                                            {fieldErrors.harvestDate && <div className="text-xs text-red-600">{fieldErrors.harvestDate}</div>}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="dispatchDateTime">Dispatch Date & Time</Label>
+                                            <Input id="dispatchDateTime" type="datetime-local"
+                                                value={formData.dispatchDateTime} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("dispatchDateTime", e.target.value)} />
+                                            {fieldErrors.dispatchDateTime && <div className="text-xs text-red-600">{fieldErrors.dispatchDateTime}</div>}
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="landSizeAcres">Land Size (acres)</Label>
+                                            <Input id="landSizeAcres" type="number" min="0" step="0.1"
+                                                value={formData.landSizeAcres} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("landSizeAcres", e.target.value)} />
                                         </div>
                                     </div>
                                     <div className="space-y-1.5">
                                         <Label htmlFor="basePrice">Base Price (Rs/kg)</Label>
                                         <div className="flex gap-2">
                                             <Input id="basePrice" type="number" min="1" required
-                                                value={formData.basePrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, basePrice: e.target.value })} />
+                                                value={formData.basePrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange("basePrice", e.target.value)} />
                                             <Button type="button" variant="outline" className="rounded-full border-neutral-300 text-black shrink-0 text-xs px-3" onClick={handleGetInsight}
                                                 disabled={loadingInsight || !formData.cropType || !formData.location}>
                                                 {loadingInsight ? "..." : "AI Price Hint"}
                                             </Button>
+                                        </div>
+                                        {fieldErrors.basePrice && <div className="text-xs text-red-600">{fieldErrors.basePrice}</div>}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="images">Upload Produce Images</Label>
+                                            <Input id="images" type="file" accept="image/jpeg,image/jpg,image/png,image/webp" multiple
+                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleImageFiles(e.target.files)} />
+                                            {selectedImageNames.length > 0 && (
+                                                <div className="text-xs text-neutral-500">Selected: {selectedImageNames.join(", ")}</div>
+                                            )}
+                                            {fieldErrors.image1 && <div className="text-xs text-red-600">{fieldErrors.image1}</div>}
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <div className="text-xs text-neutral-500 mt-7">
+                                                Minimum 2 images required. Max 5MB each.
+                                            </div>
+                                            {fieldErrors.image2 && <div className="text-xs text-red-600">{fieldErrors.image2}</div>}
                                         </div>
                                     </div>
                                     {insight && (
@@ -526,6 +805,11 @@ export default function FarmerDashboard() {
                                                         <div>
                                                             <div className="font-medium text-black">{bid.mandiOwnerId?.name || "Mandi Owner"}</div>
                                                             <div className="text-xs text-neutral-400">{bid.mandiOwnerId?.email}</div>
+                                                            {bid.mandiOwnerId?._id && (
+                                                                <Link href={`/chat?userId=${bid.mandiOwnerId._id}`} className="text-xs text-neutral-600 hover:text-black underline-offset-2 hover:underline">
+                                                                    Message
+                                                                </Link>
+                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             <div className="text-right">
@@ -609,8 +893,13 @@ export default function FarmerDashboard() {
                                                 <span>Delivered</span>
                                             </div>
                                             {d.transporterId && (
-                                                <div className="mt-4 text-sm text-neutral-500">
-                                                    Transporter: <Link href={`/profile/${d.transporterId._id}`} className="font-medium text-black dark:text-white hover:underline">{d.transporterId.name}</Link>
+                                                <div className="mt-4 text-sm text-neutral-500 flex items-center gap-3 flex-wrap">
+                                                    <span>
+                                                        Transporter: <Link href={`/profile/${d.transporterId._id}`} className="font-medium text-black dark:text-white hover:underline">{d.transporterId.name}</Link>
+                                                    </span>
+                                                    <Link href={`/chat?userId=${d.transporterId._id}`} className="px-2.5 py-1 rounded-full text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">
+                                                        Message
+                                                    </Link>
                                                 </div>
                                             )}
                                             {d.status === "delivered" && (

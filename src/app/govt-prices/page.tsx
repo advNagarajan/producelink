@@ -240,7 +240,7 @@ export default function GovtPricesPage() {
                                     { label: "Lowest", value: (stats.lowestPrice / 100).toFixed(1), prefix: "Rs ", suffix: "/kg" },
                                     { label: "Highest", value: (stats.highestPrice / 100).toFixed(1), prefix: "Rs ", suffix: "/kg" },
                                     { label: "Median", value: (stats.medianModalPrice / 100).toFixed(1), prefix: "Rs ", suffix: "/kg" },
-                                    { label: "Markets", value: stats.marketsReporting.toString(), prefix: "", suffix: " mandis" },
+                                    { label: "Markets", value: stats.marketsReporting?.toString() ?? "N/A", prefix: "", suffix: " mandis" },
                                     { label: "Spread", value: (stats.priceSpread / 100).toFixed(1), prefix: "Rs ", suffix: "/kg" },
                                 ].map(s => (
                                     <div key={s.label} className={`rounded-2xl p-4 border transition-all hover:shadow-sm ${

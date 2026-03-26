@@ -33,6 +33,11 @@ interface MLPrediction {
         mean?: number;
         count?: number;
     };
+    govtReference?: {
+        state: string;
+        minPricePerKg: number | null;
+        enforced: boolean;
+    };
     input: {
         cropType: string;
         location: string;
@@ -118,7 +123,7 @@ export default function MLPricePredictor({ cropType, location, quantity = 100, q
         );
     }
 
-    const { prediction: pred, confidence, factors, model, cropStats, input } = prediction;
+    const { prediction: pred, confidence, factors, model, cropStats, input, govtReference } = prediction;
     const conf = confidenceColors[confidence.level] || confidenceColors.medium;
     const priceRange = pred.suggestedMax - pred.suggestedMin;
 
@@ -202,6 +207,16 @@ export default function MLPricePredictor({ cropType, location, quantity = 100, q
                             Based on {confidence.basedOnSamples} historical transactions for {input.cropType}
                         </div>
                     </div>
+
+                    {/* Government benchmark */}
+                    {govtReference?.enforced && govtReference.minPricePerKg !== null && (
+                        <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                            <div className="text-xs font-semibold text-blue-700 dark:text-blue-300">Government Reference Applied</div>
+                            <div className="text-xs text-blue-700/90 dark:text-blue-200 mt-1">
+                                {govtReference.state}: Min Rs {govtReference.minPricePerKg}/kg. Suggested prices are kept at or above this floor.
+                            </div>
+                        </div>
+                    )}
 
                     {/* Influencing factors */}
                     {factors.length > 0 && (

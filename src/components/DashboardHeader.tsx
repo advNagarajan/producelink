@@ -19,7 +19,11 @@ export default function DashboardHeader() {
                 <nav className="hidden sm:flex items-center gap-5 text-sm text-neutral-500">
                     <Link href="/marketplace" className="hover:text-black dark:hover:text-white transition-colors">Market</Link>
                     <Link href="/analytics" className="hover:text-black dark:hover:text-white transition-colors">Analytics</Link>
-                    <Link href="/govt-prices" className="hover:text-black dark:hover:text-white transition-colors">Govt Prices</Link>
+                    {user.role === "transporter" ? (
+                        <Link href="/dashboard/transporter" className="hover:text-black dark:hover:text-white transition-colors">Route Tools</Link>
+                    ) : (
+                        <Link href="/govt-prices" className="hover:text-black dark:hover:text-white transition-colors">Govt Prices</Link>
+                    )}
                     <Link href="/chat" className="hover:text-black dark:hover:text-white transition-colors">Messages</Link>
                     <Link href={`/profile/${user.id}`} className="hover:text-black dark:hover:text-white transition-colors">Profile</Link>
                 </nav>

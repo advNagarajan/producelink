@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/AuthProvider";
 import AppShell from "@/components/AppShell";
 import StarRating from "@/components/StarRating";
+import MapView from "@/components/MapView";
+import AIOpsAssistant from "@/components/AIOpsAssistant";
 import Link from "next/link";
 
 interface DeliveryRequest {
@@ -24,6 +26,44 @@ interface DeliveryRequest {
     dropoffLocation: string;
     status: "pending" | "accepted" | "in_transit" | "delivered";
     createdAt: string;
+}
+
+interface RoutePoint {
+    lat: number;
+    lng: number;
+    label?: string;
+}
+
+interface RouteOptimization {
+    pickup: RoutePoint;
+    dropoff: RoutePoint;
+    distanceKm: number;
+    durationMinutes: number;
+    routePath: RoutePoint[];
+    checkpoints: RoutePoint[];
+    vehicleRecommendation: string;
+    estimatedCost: {
+        currency: string;
+        min: number;
+        max: number;
+    };
+    fuelPlan?: {
+        vehicleClass: string;
+        assumedMileageKmpl: number;
+        estimatedFuelLiters: number;
+        safetyBufferLiters: number;
+        suggestedFuelLiters: number;
+        assumedDieselPricePerLiter: number;
+        estimatedFuelCost: number;
+    };
+    fuelStations?: Array<{
+        name: string;
+        brand?: string;
+        lat: number;
+        lng: number;
+        distanceFromPickupKm?: number;
+    }>;
+    strategy: string;
 }
 
 const statusStyles: Record<string, string> = {
@@ -63,7 +103,7 @@ export default function TransporterDashboard() {
     const [updating, setUpdating] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<Tab>("overview");
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const [confirmAction, setConfirmAction] = useState<{ id: string; status: string; label: string } | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{ id: string; status: string; label: string; req?: DeliveryRequest } | null>(null);
     const [toast, setToast] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState<"newest" | "quantity" | "crop">("newest");
@@ -71,6 +111,10 @@ export default function TransporterDashboard() {
 
     const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
     const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+    const [routePlans, setRoutePlans] = useState<Record<string, RouteOptimization>>({});
+    const [routeLoading, setRouteLoading] = useState<Record<string, boolean>>({});
+    const [pickupChecklist, setPickupChecklist] = useState<Record<string, { cargoLoaded: boolean; documentsChecked: boolean; pickupVerified: boolean }>>({});
+    const [deliveryConfirmation, setDeliveryConfirmation] = useState<Record<string, { receiverName: string; proofNote: string; deliveredQuantity: string }>>({});
 
     const fetchRouteAdvice = async (req: DeliveryRequest) => {
         setAiLoading(prev => ({ ...prev, [req._id]: true }));
@@ -91,6 +135,34 @@ export default function TransporterDashboard() {
             }
         } catch { /* silent */ }
         setAiLoading(prev => ({ ...prev, [req._id]: false }));
+    };
+
+    const optimizeRoute = async (req: DeliveryRequest) => {
+        setRouteLoading(prev => ({ ...prev, [req._id]: true }));
+        try {
+            const res = await fetch("/api/predict/route-optimization", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    cropType: req.harvestId?.cropType || "Produce",
+                    quantity: req.harvestId?.quantity || 0,
+                    pickupLocation: req.pickupLocation,
+                    dropoffLocation: req.dropoffLocation,
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || "Failed to optimize route");
+            }
+            const data = await res.json();
+            setRoutePlans(prev => ({ ...prev, [req._id]: data }));
+            showToast("AI route optimized with maps");
+        } catch (err) {
+            console.error("Failed to optimize route", err);
+            showToast("Route optimization unavailable right now");
+        } finally {
+            setRouteLoading(prev => ({ ...prev, [req._id]: false }));
+        }
     };
 
     const showToast = (message: string) => {
@@ -115,25 +187,97 @@ export default function TransporterDashboard() {
         return () => clearInterval(interval);
     }, []);
 
-    const handleUpdateStatus = async (id: string, status: string) => {
+    useEffect(() => {
+        if (!confirmAction) return;
+        if (confirmAction.status === "in_transit") {
+            setPickupChecklist(prev => ({
+                ...prev,
+                [confirmAction.id]: prev[confirmAction.id] || {
+                    cargoLoaded: false,
+                    documentsChecked: false,
+                    pickupVerified: false,
+                },
+            }));
+        }
+        if (confirmAction.status === "delivered") {
+            setDeliveryConfirmation(prev => ({
+                ...prev,
+                [confirmAction.id]: prev[confirmAction.id] || {
+                    receiverName: "",
+                    proofNote: "",
+                    deliveredQuantity: String(confirmAction.req?.harvestId?.quantity || ""),
+                },
+            }));
+        }
+    }, [confirmAction]);
+
+    const handleUpdateStatus = async (id: string, status: string, workflowMeta?: Record<string, unknown>) => {
         setUpdating(id);
         setConfirmAction(null);
         try {
             const res = await fetch(`/api/delivery-requests/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status }),
+                body: JSON.stringify({ status, workflowMeta }),
             });
             if (res.ok) {
                 fetchRequests();
                 const labels: Record<string, string> = { accepted: "Request accepted", in_transit: "Delivery in transit", delivered: "Delivery completed" };
                 showToast(labels[status] || "Status updated");
+            } else {
+                const err = await res.json().catch(() => ({}));
+                showToast(err.detail || "Status update failed");
             }
         } catch (err) {
             console.error("Failed to update status", err);
         } finally {
             setUpdating(null);
         }
+    };
+
+    const handleConfirmAction = async () => {
+        if (!confirmAction) return;
+
+        if (confirmAction.status === "in_transit") {
+            const checklist = pickupChecklist[confirmAction.id] || { cargoLoaded: false, documentsChecked: false, pickupVerified: false };
+            const routePlan = routePlans[confirmAction.id];
+            if (!checklist.cargoLoaded || !checklist.documentsChecked || !checklist.pickupVerified) {
+                showToast("Complete pickup checklist first");
+                return;
+            }
+            if (!routePlan) {
+                showToast("Run AI route optimization before transit");
+                return;
+            }
+            await handleUpdateStatus(confirmAction.id, confirmAction.status, {
+                pickupChecklist: checklist,
+                routePlan: {
+                    distanceKm: routePlan.distanceKm,
+                    durationMinutes: routePlan.durationMinutes,
+                    strategy: routePlan.strategy,
+                    checkpoints: routePlan.checkpoints,
+                },
+            });
+            return;
+        }
+
+        if (confirmAction.status === "delivered") {
+            const form = deliveryConfirmation[confirmAction.id] || { receiverName: "", proofNote: "", deliveredQuantity: "" };
+            if (!form.receiverName.trim() || form.proofNote.trim().length < 8 || Number(form.deliveredQuantity) <= 0) {
+                showToast("Receiver name, proof note and quantity are required");
+                return;
+            }
+            await handleUpdateStatus(confirmAction.id, confirmAction.status, {
+                deliveryConfirmation: {
+                    receiverName: form.receiverName.trim(),
+                    proofNote: form.proofNote.trim(),
+                    deliveredQuantity: Number(form.deliveredQuantity),
+                },
+            });
+            return;
+        }
+
+        await handleUpdateStatus(confirmAction.id, confirmAction.status);
     };
 
     const pending = useMemo(() => requests.filter(r => r.status === "pending"), [requests]);
@@ -194,16 +338,174 @@ export default function TransporterDashboard() {
             {/* Confirm modal */}
             {confirmAction && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
                         <h3 className="text-lg font-bold text-black dark:text-white mb-2">Confirm Action</h3>
                         <p className="text-neutral-500 text-sm mb-6">
-                            Are you sure you want to {confirmAction.label.toLowerCase()}? This action cannot be undone.
+                            {confirmAction.status === "in_transit"
+                                ? "Transit start requires a verified pickup checklist and AI route optimization."
+                                : confirmAction.status === "delivered"
+                                  ? "Delivery completion requires receiver verification and proof details."
+                                  : `Are you sure you want to ${confirmAction.label.toLowerCase()}?`}
                         </p>
+
+                        {confirmAction.status === "in_transit" && (
+                            <div className="space-y-4 mb-6">
+                                <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                        <div className="text-sm font-semibold text-black dark:text-white">Pickup Readiness Checklist</div>
+                                        <Button
+                                            variant="outline"
+                                            className="rounded-full"
+                                            disabled={routeLoading[confirmAction.id]}
+                                            onClick={() => confirmAction.req && optimizeRoute(confirmAction.req)}
+                                        >
+                                            {routeLoading[confirmAction.id] ? "Optimizing..." : "Optimize Route with AI"}
+                                        </Button>
+                                    </div>
+                                    {[
+                                        { key: "cargoLoaded", label: "Cargo loaded and sealed" },
+                                        { key: "documentsChecked", label: "Permit/challan verified" },
+                                        { key: "pickupVerified", label: "Pickup location physically verified" },
+                                    ].map((item) => (
+                                        <label key={item.key} className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300 mt-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={pickupChecklist[confirmAction.id]?.[item.key as "cargoLoaded" | "documentsChecked" | "pickupVerified"] || false}
+                                                onChange={(e) =>
+                                                    setPickupChecklist((prev) => ({
+                                                        ...prev,
+                                                        [confirmAction.id]: {
+                                                            ...(prev[confirmAction.id] || {
+                                                                cargoLoaded: false,
+                                                                documentsChecked: false,
+                                                                pickupVerified: false,
+                                                            }),
+                                                            [item.key]: e.target.checked,
+                                                        },
+                                                    }))
+                                                }
+                                            />
+                                            {item.label}
+                                        </label>
+                                    ))}
+                                </div>
+
+                                {routePlans[confirmAction.id] && (
+                                    <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 p-4 space-y-3">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                <div className="text-neutral-400">Distance</div>
+                                                <div className="font-semibold text-black dark:text-white">{routePlans[confirmAction.id].distanceKm} km</div>
+                                            </div>
+                                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                <div className="text-neutral-400">ETA</div>
+                                                <div className="font-semibold text-black dark:text-white">{routePlans[confirmAction.id].durationMinutes} min</div>
+                                            </div>
+                                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                <div className="text-neutral-400">Vehicle</div>
+                                                <div className="font-semibold text-black dark:text-white">{routePlans[confirmAction.id].vehicleRecommendation}</div>
+                                            </div>
+                                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                <div className="text-neutral-400">Cost</div>
+                                                <div className="font-semibold text-black dark:text-white">Rs {routePlans[confirmAction.id].estimatedCost.min} - {routePlans[confirmAction.id].estimatedCost.max}</div>
+                                            </div>
+                                        </div>
+                                        {routePlans[confirmAction.id].fuelPlan && (
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                    <div className="text-neutral-400">Mileage</div>
+                                                    <div className="font-semibold text-black dark:text-white">{routePlans[confirmAction.id].fuelPlan?.assumedMileageKmpl} km/l</div>
+                                                </div>
+                                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                    <div className="text-neutral-400">Fuel Needed</div>
+                                                    <div className="font-semibold text-black dark:text-white">{routePlans[confirmAction.id].fuelPlan?.estimatedFuelLiters} L</div>
+                                                </div>
+                                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                    <div className="text-neutral-400">Suggested Fuel</div>
+                                                    <div className="font-semibold text-black dark:text-white">{routePlans[confirmAction.id].fuelPlan?.suggestedFuelLiters} L</div>
+                                                </div>
+                                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                                    <div className="text-neutral-400">Fuel Cost</div>
+                                                    <div className="font-semibold text-black dark:text-white">Rs {routePlans[confirmAction.id].fuelPlan?.estimatedFuelCost}</div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {routePlans[confirmAction.id].fuelStations && routePlans[confirmAction.id].fuelStations.length > 0 && (
+                                            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-2">
+                                                <div className="text-xs font-semibold text-black dark:text-white mb-1">Nearby Fuel Stations</div>
+                                                <div className="space-y-1">
+                                                    {routePlans[confirmAction.id].fuelStations?.slice(0, 4).map((s, idx) => (
+                                                        <div key={`${s.lat}-${s.lng}-${idx}`} className="text-xs text-neutral-600 dark:text-neutral-300">
+                                                            {s.name}{s.brand ? ` (${s.brand})` : ""} / {s.distanceFromPickupKm ?? "-"} km from pickup
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        <MapView
+                                            pickup={routePlans[confirmAction.id].pickup}
+                                            dropoff={routePlans[confirmAction.id].dropoff}
+                                            routePath={routePlans[confirmAction.id].routePath}
+                                            checkpoints={routePlans[confirmAction.id].checkpoints}
+                                            height="220px"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {confirmAction.status === "delivered" && (
+                            <div className="space-y-3 mb-6">
+                                <Input
+                                    placeholder="Receiver name"
+                                    value={deliveryConfirmation[confirmAction.id]?.receiverName || ""}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                        setDeliveryConfirmation(prev => ({
+                                            ...prev,
+                                            [confirmAction.id]: {
+                                                ...(prev[confirmAction.id] || { receiverName: "", proofNote: "", deliveredQuantity: "" }),
+                                                receiverName: e.target.value,
+                                            },
+                                        }))
+                                    }
+                                />
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    placeholder="Delivered quantity (kg)"
+                                    value={deliveryConfirmation[confirmAction.id]?.deliveredQuantity || ""}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                        setDeliveryConfirmation(prev => ({
+                                            ...prev,
+                                            [confirmAction.id]: {
+                                                ...(prev[confirmAction.id] || { receiverName: "", proofNote: "", deliveredQuantity: "" }),
+                                                deliveredQuantity: e.target.value,
+                                            },
+                                        }))
+                                    }
+                                />
+                                <textarea
+                                    className="w-full min-h-24 rounded-2xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-4 py-2 text-sm"
+                                    placeholder="Proof note (photo ref, OTP verified, delivery condition etc.)"
+                                    value={deliveryConfirmation[confirmAction.id]?.proofNote || ""}
+                                    onChange={(e) =>
+                                        setDeliveryConfirmation(prev => ({
+                                            ...prev,
+                                            [confirmAction.id]: {
+                                                ...(prev[confirmAction.id] || { receiverName: "", proofNote: "", deliveredQuantity: "" }),
+                                                proofNote: e.target.value,
+                                            },
+                                        }))
+                                    }
+                                />
+                            </div>
+                        )}
+
                         <div className="flex gap-3">
                             <Button variant="outline" className="flex-1 rounded-full" onClick={() => setConfirmAction(null)}>Cancel</Button>
                             <Button className="flex-1 bg-black hover:bg-neutral-800 text-white rounded-full"
                                 disabled={updating === confirmAction.id}
-                                onClick={() => handleUpdateStatus(confirmAction.id, confirmAction.status)}>
+                                onClick={handleConfirmAction}>
                                 {updating === confirmAction.id ? (
                                     <span className="flex items-center gap-2">
                                         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -230,6 +532,8 @@ export default function TransporterDashboard() {
                         </button>
                     ))}
                 </div>
+
+                <AIOpsAssistant title="Transport AI Assistant" subtitle="Ask about delivery workload, active routes, and operational priorities." />
 
                 {loading ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -343,7 +647,8 @@ export default function TransporterDashboard() {
                                             {active.map(req => (
                                                 <ActiveDeliveryRow key={req._id} req={req}
                                                     updating={updating}
-                                                    onConfirm={(id, status, label) => setConfirmAction({ id, status, label })} />
+                                                    routePlan={routePlans[req._id]}
+                                                    onConfirm={(id, status, label, actionReq) => setConfirmAction({ id, status, label, req: actionReq })} />
                                             ))}
                                         </div>
                                     </div>
@@ -362,13 +667,16 @@ export default function TransporterDashboard() {
                                             {pending.slice(0, 3).map(req => (
                                                 <DeliveryCard key={req._id} req={req}
                                                     actionLabel="Accept Request"
-                                                    onAction={() => setConfirmAction({ id: req._id, status: "accepted", label: "Accept Request" })}
+                                                    onAction={() => setConfirmAction({ id: req._id, status: "accepted", label: "Accept Request", req })}
                                                     isUpdating={updating === req._id}
                                                     expanded={expandedId === req._id}
                                                     onToggleExpand={() => setExpandedId(expandedId === req._id ? null : req._id)}
                                                     aiAdvice={aiAdvice[req._id]}
                                                     aiLoading={aiLoading[req._id]}
-                                                    onAskAI={() => fetchRouteAdvice(req)} />
+                                                    routePlan={routePlans[req._id]}
+                                                    routeLoading={routeLoading[req._id]}
+                                                    onAskAI={() => fetchRouteAdvice(req)}
+                                                    onOptimizeRoute={() => optimizeRoute(req)} />
                                             ))}
                                         </div>
                                     </div>
@@ -434,13 +742,16 @@ export default function TransporterDashboard() {
                                         {filterAndSort(pending).map((req) => (
                                             <DeliveryCard key={req._id} req={req}
                                                 actionLabel="Accept Request"
-                                                onAction={() => setConfirmAction({ id: req._id, status: "accepted", label: "Accept Request" })}
+                                                onAction={() => setConfirmAction({ id: req._id, status: "accepted", label: "Accept Request", req })}
                                                 isUpdating={updating === req._id}
                                                 expanded={expandedId === req._id}
                                                 onToggleExpand={() => setExpandedId(expandedId === req._id ? null : req._id)}
                                                 aiAdvice={aiAdvice[req._id]}
                                                 aiLoading={aiLoading[req._id]}
-                                                onAskAI={() => fetchRouteAdvice(req)} />
+                                                routePlan={routePlans[req._id]}
+                                                routeLoading={routeLoading[req._id]}
+                                                onAskAI={() => fetchRouteAdvice(req)}
+                                                onOptimizeRoute={() => optimizeRoute(req)} />
                                         ))}
                                     </div>
                                 )}
@@ -480,7 +791,8 @@ export default function TransporterDashboard() {
                                         {active.map((req) => (
                                             <ActiveDeliveryRow key={req._id} req={req}
                                                 updating={updating}
-                                                onConfirm={(id, status, label) => setConfirmAction({ id, status, label })}
+                                                routePlan={routePlans[req._id]}
+                                                onConfirm={(id, status, label, actionReq) => setConfirmAction({ id, status, label, req: actionReq })}
                                                 showExpanded />
                                         ))}
                                     </div>
@@ -559,11 +871,13 @@ function ActiveDeliveryRow({
     req,
     updating,
     onConfirm,
+    routePlan,
     showExpanded = false,
 }: {
     req: DeliveryRequest;
     updating: string | null;
-    onConfirm: (id: string, status: string, label: string) => void;
+    onConfirm: (id: string, status: string, label: string, req: DeliveryRequest) => void;
+    routePlan?: RouteOptimization;
     showExpanded?: boolean;
 }) {
     const steps = [
@@ -585,6 +899,11 @@ function ActiveDeliveryRow({
                         <div>
                             <div className="font-semibold text-black dark:text-white">{req.harvestId?.cropType || "Produce"} -- {req.harvestId?.quantity} kg</div>
                             <div className="text-xs text-neutral-400">For: {req.requesterId?.name || "Farmer"} / {timeAgo(req.createdAt)}</div>
+                            {req.requesterId?._id && (
+                                <Link href={`/chat?userId=${req.requesterId._id}`} className="text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white underline-offset-2 hover:underline">
+                                    Message requester
+                                </Link>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -593,7 +912,7 @@ function ActiveDeliveryRow({
                         </span>
                         {nextStatusLabel[req.status] && (
                             <Button className="bg-black hover:bg-neutral-800 text-white rounded-full text-sm transition-all duration-200 hover:shadow-md"
-                                onClick={() => onConfirm(req._id, nextStatus[req.status], nextStatusLabel[req.status])}
+                                onClick={() => onConfirm(req._id, nextStatus[req.status], nextStatusLabel[req.status], req)}
                                 disabled={updating === req._id}>
                                 {updating === req._id ? (
                                     <span className="flex items-center gap-2">
@@ -649,6 +968,66 @@ function ActiveDeliveryRow({
                         </div>
                     ))}
                 </div>
+
+                {showExpanded && routePlan && (
+                    <div className="mt-4 space-y-3 border-t border-neutral-100 dark:border-neutral-700 pt-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                <div className="text-neutral-400">Distance</div>
+                                <div className="font-semibold text-black dark:text-white">{routePlan.distanceKm} km</div>
+                            </div>
+                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                <div className="text-neutral-400">ETA</div>
+                                <div className="font-semibold text-black dark:text-white">{routePlan.durationMinutes} min</div>
+                            </div>
+                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                <div className="text-neutral-400">Vehicle</div>
+                                <div className="font-semibold text-black dark:text-white">{routePlan.vehicleRecommendation}</div>
+                            </div>
+                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                <div className="text-neutral-400">Cost</div>
+                                <div className="font-semibold text-black dark:text-white">Rs {routePlan.estimatedCost.min}-{routePlan.estimatedCost.max}</div>
+                            </div>
+                        </div>
+                        {routePlan.fuelPlan && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                    <div className="text-neutral-400">Fuel Needed</div>
+                                    <div className="font-semibold text-black dark:text-white">{routePlan.fuelPlan.estimatedFuelLiters} L</div>
+                                </div>
+                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                    <div className="text-neutral-400">Buffer</div>
+                                    <div className="font-semibold text-black dark:text-white">{routePlan.fuelPlan.safetyBufferLiters} L</div>
+                                </div>
+                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                    <div className="text-neutral-400">Suggested</div>
+                                    <div className="font-semibold text-black dark:text-white">{routePlan.fuelPlan.suggestedFuelLiters} L</div>
+                                </div>
+                                <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                    <div className="text-neutral-400">Fuel Cost</div>
+                                    <div className="font-semibold text-black dark:text-white">Rs {routePlan.fuelPlan.estimatedFuelCost}</div>
+                                </div>
+                            </div>
+                        )}
+                        {routePlan.fuelStations && routePlan.fuelStations.length > 0 && (
+                            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-2 text-xs">
+                                <div className="font-semibold text-black dark:text-white mb-1">Fuel Stations on/near route</div>
+                                <div className="space-y-1 text-neutral-600 dark:text-neutral-300">
+                                    {routePlan.fuelStations.slice(0, 4).map((s, idx) => (
+                                        <div key={`${s.lat}-${s.lng}-${idx}`}>{s.name}{s.brand ? ` (${s.brand})` : ""} / {s.distanceFromPickupKm ?? "-"} km</div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <MapView
+                            pickup={routePlan.pickup}
+                            dropoff={routePlan.dropoff}
+                            routePath={routePlan.routePath}
+                            checkpoints={routePlan.checkpoints}
+                            height="200px"
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Bottom accent bar */}
@@ -667,7 +1046,10 @@ function DeliveryCard({
     onToggleExpand,
     aiAdvice,
     aiLoading,
+    routePlan,
+    routeLoading,
     onAskAI,
+    onOptimizeRoute,
 }: {
     req: DeliveryRequest;
     actionLabel?: string;
@@ -677,7 +1059,10 @@ function DeliveryCard({
     onToggleExpand?: () => void;
     aiAdvice?: string;
     aiLoading?: boolean;
+    routePlan?: RouteOptimization;
+    routeLoading?: boolean;
     onAskAI?: () => void;
+    onOptimizeRoute?: () => void;
 }) {
     const steps = ["pending", "accepted", "in_transit", "delivered"];
     const currentIndex = steps.indexOf(req.status);
@@ -699,6 +1084,11 @@ function DeliveryCard({
                             <p className="text-xs text-neutral-400">
                                 {req.requesterId?.name || "Farmer"} / {timeAgo(req.createdAt)}
                             </p>
+                            {req.requesterId?._id && (
+                                <Link href={`/chat?userId=${req.requesterId._id}`} className="text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white underline-offset-2 hover:underline">
+                                    Message requester
+                                </Link>
+                            )}
                         </div>
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-medium tracking-wide ${statusStyles[req.status]}`}>
@@ -724,7 +1114,7 @@ function DeliveryCard({
                 </div>
 
                 {/* Expandable details */}
-                <div className={`overflow-hidden transition-all duration-300 ${expanded ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
+                <div className={`overflow-hidden transition-all duration-300 ${expanded ? "max-h-[520px] opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
                     <div className="space-y-2 text-sm pt-3 border-t border-neutral-100 dark:border-neutral-700">
                         {req.harvestId && (
                             <div className="flex justify-between">
@@ -742,34 +1132,98 @@ function DeliveryCard({
                             <span className="text-neutral-400">Requested</span>
                             <span className="text-neutral-500">{new Date(req.createdAt).toLocaleDateString()}</span>
                         </div>
+                        {routePlan && (
+                            <>
+                                <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+                                    <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                        <div className="text-neutral-400">Distance / ETA</div>
+                                        <div className="font-medium text-black dark:text-white">{routePlan.distanceKm} km / {routePlan.durationMinutes} min</div>
+                                    </div>
+                                    <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                        <div className="text-neutral-400">Estimated Cost</div>
+                                        <div className="font-medium text-black dark:text-white">Rs {routePlan.estimatedCost.min} - {routePlan.estimatedCost.max}</div>
+                                    </div>
+                                </div>
+                                {routePlan.fuelPlan && (
+                                    <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+                                        <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                            <div className="text-neutral-400">Fuel</div>
+                                            <div className="font-medium text-black dark:text-white">{routePlan.fuelPlan.estimatedFuelLiters}L + {routePlan.fuelPlan.safetyBufferLiters}L buffer</div>
+                                        </div>
+                                        <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2">
+                                            <div className="text-neutral-400">Estimated Fuel Cost</div>
+                                            <div className="font-medium text-black dark:text-white">Rs {routePlan.fuelPlan.estimatedFuelCost}</div>
+                                        </div>
+                                    </div>
+                                )}
+                                {routePlan.fuelStations && routePlan.fuelStations.length > 0 && (
+                                    <div className="mt-2 rounded-lg border border-neutral-200 dark:border-neutral-700 p-2">
+                                        <div className="text-[10px] text-neutral-400 mb-1">Nearby Fuel Stations</div>
+                                        <div className="space-y-1 text-xs text-neutral-600 dark:text-neutral-300">
+                                            {routePlan.fuelStations.slice(0, 3).map((s, idx) => (
+                                                <div key={`${s.lat}-${s.lng}-${idx}`}>{s.name}{s.brand ? ` (${s.brand})` : ""} / {s.distanceFromPickupKm ?? "-"} km</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <MapView
+                                    pickup={routePlan.pickup}
+                                    dropoff={routePlan.dropoff}
+                                    routePath={routePlan.routePath}
+                                    checkpoints={routePlan.checkpoints}
+                                    height="180px"
+                                />
+                            </>
+                        )}
                     </div>
                 </div>
 
                 {/* AI Route Advice */}
                 {onAskAI && (
                     <div className="mt-3">
-                        <button
-                            onClick={onAskAI}
-                            disabled={aiLoading}
-                            className="w-full text-left px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all text-xs font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2"
-                        >
-                            {aiLoading ? (
-                                <>
-                                    <span className="w-3.5 h-3.5 border-2 border-amber-400/30 border-t-amber-500 rounded-full animate-spin" />
-                                    Analyzing route...
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                    </svg>
-                                    Get AI Route Advice
-                                </>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button
+                                onClick={onAskAI}
+                                disabled={aiLoading}
+                                className="w-full text-left px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all text-xs font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2"
+                            >
+                                {aiLoading ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 border-2 border-amber-400/30 border-t-amber-500 rounded-full animate-spin" />
+                                        Analyzing route...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                        </svg>
+                                        AI Advice
+                                    </>
+                                )}
+                            </button>
+                            {onOptimizeRoute && (
+                                <button
+                                    onClick={onOptimizeRoute}
+                                    disabled={routeLoading}
+                                    className="w-full text-left px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-all text-xs font-medium text-neutral-700 dark:text-neutral-200 flex items-center gap-2"
+                                >
+                                    {routeLoading ? (
+                                        <>
+                                            <span className="w-3.5 h-3.5 border-2 border-neutral-400/30 border-t-neutral-700 dark:border-t-neutral-200 rounded-full animate-spin" />
+                                            Optimizing...
+                                        </>
+                                    ) : "Optimize Route + Map"}
+                                </button>
                             )}
-                        </button>
+                        </div>
                         {aiAdvice && (
                             <div className="mt-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
                                 <p className="text-xs text-amber-800 dark:text-amber-200 whitespace-pre-line leading-relaxed">{aiAdvice}</p>
+                            </div>
+                        )}
+                        {routePlan?.strategy && (
+                            <div className="mt-2 px-3 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                                <p className="text-xs text-neutral-700 dark:text-neutral-200 whitespace-pre-line leading-relaxed">{routePlan.strategy}</p>
                             </div>
                         )}
                     </div>

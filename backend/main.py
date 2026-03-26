@@ -49,3 +49,8 @@ app.include_router(price_model.router, prefix="/api", tags=["price_model"])
 @app.get("/")
 async def root():
     return {"status": "ProduceLink API is running"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

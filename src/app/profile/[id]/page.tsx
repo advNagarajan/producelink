@@ -12,7 +12,72 @@ interface ProfileData {
     location?: string;
     phone?: string;
     rating: { average: number; count: number };
+    trustScore?: { score: number; label: string };
     stats: Record<string, number>;
+}
+
+function normalizeProfile(raw: any): ProfileData {
+    const ratingRaw = raw?.rating || {};
+    const averageCandidate = typeof ratingRaw.average === "number" ? ratingRaw.average : ratingRaw.avg;
+    const countCandidate = typeof ratingRaw.count === "number" ? ratingRaw.count : 0;
+
+    const stats: Record<string, number> = raw?.stats && typeof raw.stats === "object" ? raw.stats : {};
+
+    if (!raw?.stats || typeof raw.stats !== "object") {
+        const numericKeys = ["totalHarvests", "totalSold", "totalBids", "acceptedBids", "totalDeliveries", "completedDeliveries"];
+        for (const key of numericKeys) {
+            if (typeof raw?.[key] === "number") {
+                stats[key] = raw[key];
+            }
+        }
+    }
+
+    return {
+        _id: String(raw?._id || ""),
+        name: String(raw?.name || "Unknown User"),
+        email: String(raw?.email || ""),
+        role: String(raw?.role || ""),
+        location: raw?.location || raw?.farmLocation,
+        phone: raw?.phone,
+        rating: {
+            average: typeof averageCandidate === "number" ? averageCandidate : 0,
+            count: countCandidate,
+        },
+        trustScore: raw?.trustScore,
+        stats,
+    };
+}
+
+function normalizeActivities(raw: any): Activity[] {
+    if (Array.isArray(raw)) return raw;
+    if (!raw || typeof raw !== "object") return [];
+
+    if (Array.isArray(raw.harvests)) {
+        return raw.harvests.map((h: any) => ({
+            _id: String(h?._id || crypto.randomUUID()),
+            type: "harvest",
+            description: `${h?.cropType || "Produce"} listed${h?.quantity ? ` (${h.quantity} kg)` : ""}`,
+            date: h?.createdAt || new Date().toISOString(),
+        }));
+    }
+    if (Array.isArray(raw.bids)) {
+        return raw.bids.map((b: any) => ({
+            _id: String(b?._id || crypto.randomUUID()),
+            type: "bid",
+            description: `Bid placed${typeof b?.amount === "number" ? ` (Rs ${b.amount})` : ""}`,
+            date: b?.createdAt || new Date().toISOString(),
+        }));
+    }
+    if (Array.isArray(raw.deliveries)) {
+        return raw.deliveries.map((d: any) => ({
+            _id: String(d?._id || crypto.randomUUID()),
+            type: "delivery",
+            description: `Delivery ${d?.status || "updated"}`,
+            date: d?.createdAt || d?.updatedAt || new Date().toISOString(),
+        }));
+    }
+
+    return [];
 }
 
 interface Activity {
@@ -30,12 +95,17 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
     useEffect(() => {
         Promise.all([
-            fetch(`/api/profile/${id}`).then((r) => r.json()),
-            fetch(`/api/profile/${id}/activity`).then((r) => r.json()),
+            fetch(`/api/profile/${id}`).then((r) => (r.ok ? r.json() : null)),
+            fetch(`/api/profile/${id}/activity`).then((r) => (r.ok ? r.json() : null)),
         ])
             .then(([p, a]) => {
-                setProfile(p);
-                setActivities(a);
+                if (!p) {
+                    setProfile(null);
+                    setActivities([]);
+                    return;
+                }
+                setProfile(normalizeProfile(p));
+                setActivities(normalizeActivities(a));
             })
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -83,6 +153,14 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
                                 </span>
                             </div>
                             <div className="text-xs text-neutral-400">{profile.rating.count} reviews</div>
+                            {profile.trustScore?.score !== undefined && (
+                                <div className="mt-2">
+                                    <div className="text-xs text-neutral-400">Trust Score</div>
+                                    <div className="text-sm font-semibold text-black dark:text-white">
+                                        {profile.trustScore.score}/100 ({profile.trustScore.label})
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

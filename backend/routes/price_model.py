@@ -86,6 +86,24 @@ def _month_features(month: int) -> tuple[float, float]:
     return math.sin(rad), math.cos(rad)
 
 
+async def _get_govt_min_price_per_kg(crop_type: str, state: str) -> Optional[float]:
+    query: dict = {"commodity": {"$regex": f"^{crop_type.strip()}$", "$options": "i"}}
+    if state and state != "Unknown":
+        query["state"] = state
+
+    cached = await db.govt_price_cache.find_one(query, sort=[("fetchedAt", -1)])
+    if not cached:
+        return None
+
+    records = cached.get("records") or []
+    min_prices = [float(r.get("minPrice", 0)) for r in records if float(r.get("minPrice", 0)) > 0]
+    if not min_prices:
+        return None
+
+    # Agmarknet prices are per quintal; convert to per kg.
+    return round(min(min_prices) / 100, 2)
+
+
 def _build_feature_vector(
     crop: str,
     grade: str,
@@ -314,8 +332,19 @@ async def ml_predict(body: MLPredictBody, request: Request):
     else:
         spread = model_data.mae
 
+    suggested_price = round(predicted, 2)
     suggested_min = max(0, round(predicted - spread, 2))
     suggested_max = round(predicted + spread, 2)
+
+    # Enforce government reference floor for the selected crop/state.
+    govt_min = await _get_govt_min_price_per_kg(crop, state)
+    if govt_min is not None:
+        grade_floor_mult = {"A": 1.03, "B": 1.01, "C": 1.00, "D": 0.98}
+        floor_price = round(govt_min * grade_floor_mult.get(grade, 1.0), 2)
+
+        suggested_min = max(suggested_min, floor_price)
+        suggested_price = max(suggested_price, floor_price)
+        suggested_max = max(suggested_max, round(suggested_price + max(0.5, spread), 2))
 
     # Confidence level based on data availability for this crop
     crop_stats = model_data.price_stats.get(crop, {})
@@ -385,9 +414,16 @@ async def ml_predict(body: MLPredictBody, request: Request):
     # Sort factors by impact
     factors.sort(key=lambda f: -f["impact"])
 
+    if govt_min is not None:
+        factors.insert(0, {
+            "factor": "Govt Reference Floor",
+            "impact": 100.0,
+            "detail": f"State mandi minimum ~Rs {govt_min}/kg; suggestions are kept at/above this floor",
+        })
+
     return {
         "prediction": {
-            "suggestedPrice": round(predicted, 2),
+            "suggestedPrice": round(suggested_price, 2),
             "suggestedMin": suggested_min,
             "suggestedMax": suggested_max,
             "unit": "Rs/kg",
@@ -406,6 +442,11 @@ async def ml_predict(body: MLPredictBody, request: Request):
             "trainedAt": model_data.trained_at.isoformat() if model_data.trained_at else None,
         },
         "cropStats": crop_stats,
+        "govtReference": {
+            "state": state,
+            "minPricePerKg": govt_min,
+            "enforced": govt_min is not None,
+        },
         "input": {
             "cropType": crop,
             "location": body.location,

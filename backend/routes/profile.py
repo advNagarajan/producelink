@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Request, HTTPException
 from bson import ObjectId
+from typing import Awaitable, Callable, cast
 from database import db
-from auth import get_current_user
+from auth import get_current_user as imported_get_current_user
 from utils import serialize_doc
+from trust_score import compute_farmer_trust_score
 
 router = APIRouter()
+get_current_user = cast(Callable[[Request], Awaitable[dict]], imported_get_current_user)
 
 
 @router.get("/profile/{user_id}")
@@ -19,6 +22,8 @@ async def get_profile(user_id: str, request: Request):
         raise HTTPException(status_code=404, detail="User not found")
 
     profile = serialize_doc(user)
+    if not isinstance(profile, dict):
+        raise HTTPException(status_code=500, detail="Failed to serialize profile")
 
     # Rating summary
     rating_pipeline = [
@@ -36,6 +41,7 @@ async def get_profile(user_id: str, request: Request):
     if role == "farmer":
         profile["totalHarvests"] = await db.harvests.count_documents({"farmerId": ObjectId(user_id)})
         profile["totalSold"] = await db.harvests.count_documents({"farmerId": ObjectId(user_id), "status": "sold"})
+        profile["trustScore"] = await compute_farmer_trust_score(ObjectId(user_id))
     elif role == "mandi_owner":
         profile["totalBids"] = await db.bids.count_documents({"mandiOwnerId": ObjectId(user_id)})
         profile["acceptedBids"] = await db.bids.count_documents({"mandiOwnerId": ObjectId(user_id), "status": "accepted"})
@@ -44,6 +50,21 @@ async def get_profile(user_id: str, request: Request):
         profile["completedDeliveries"] = await db.deliveryrequests.count_documents({"transporterId": ObjectId(user_id), "status": "delivered"})
 
     return profile
+
+
+@router.get("/profile/{user_id}/trust-score")
+async def get_trust_score(user_id: str, request: Request):
+    await get_current_user(request)
+
+    user = await db.users.find_one({"_id": ObjectId(user_id)}, {"role": 1})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.get("role") != "farmer":
+        raise HTTPException(status_code=400, detail="Trust score is available for farmer profiles only")
+
+    trust = await compute_farmer_trust_score(ObjectId(user_id))
+    return trust
 
 
 @router.get("/profile/{user_id}/activity")

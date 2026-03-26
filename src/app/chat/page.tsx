@@ -20,6 +20,12 @@ interface Message {
     createdAt: string;
 }
 
+interface ChatUser {
+    id: string;
+    name: string;
+    role: string;
+}
+
 function formatTime(d: string) {
     return new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -39,17 +45,67 @@ export default function ChatPage() {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [selected, setSelected] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [chatUsers, setChatUsers] = useState<ChatUser[]>([]);
+    const [searchUsers, setSearchUsers] = useState("");
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const bottomRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const bootstrappedTargetRef = useRef<string | null>(null);
 
     useEffect(() => {
+        if (!user) return;
         fetch("/api/chat/conversations")
             .then((r) => r.json())
             .then(setConversations)
             .catch(() => {});
-    }, []);
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) return;
+        const t = setTimeout(() => {
+            const params = new URLSearchParams();
+            if (searchUsers.trim()) params.set("q", searchUsers.trim());
+            fetch(`/api/chat/users?${params.toString()}`)
+                .then((r) => (r.ok ? r.json() : []))
+                .then(setChatUsers)
+                .catch(() => setChatUsers([]));
+        }, 250);
+        return () => clearTimeout(t);
+    }, [searchUsers, user]);
+
+    useEffect(() => {
+        if (!user) return;
+        const params = new URLSearchParams(window.location.search);
+        const targetUserId = params.get("userId");
+        if (!targetUserId) return;
+        if (bootstrappedTargetRef.current === targetUserId) return;
+        bootstrappedTargetRef.current = targetUserId;
+
+        const existing = conversations.find((c) => c.userId === targetUserId);
+        if (existing) {
+            loadMessages(targetUserId);
+            return;
+        }
+
+        fetch(`/api/chat/users/${targetUserId}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((u) => {
+                if (!u) return;
+                setConversations((prev) => [
+                    {
+                        userId: u.id,
+                        userName: u.name || "User",
+                        lastMessage: "",
+                        lastTime: new Date().toISOString(),
+                        unread: 0,
+                    },
+                    ...prev,
+                ]);
+                loadMessages(targetUserId);
+            })
+            .catch(() => {});
+            }, [conversations, user]);
 
     const loadMessages = async (userId: string) => {
         setSelected(userId);
@@ -60,6 +116,23 @@ export default function ChatPage() {
         setConversations((cs) =>
             cs.map((c) => (c.userId === userId ? { ...c, unread: 0 } : c))
         );
+    };
+
+    const startConversation = (chatUser: ChatUser) => {
+        setConversations((prev) => {
+            if (prev.some((c) => c.userId === chatUser.id)) return prev;
+            return [
+                {
+                    userId: chatUser.id,
+                    userName: chatUser.name,
+                    lastMessage: "",
+                    lastTime: new Date().toISOString(),
+                    unread: 0,
+                },
+                ...prev,
+            ];
+        });
+        loadMessages(chatUser.id);
     };
 
     useEffect(() => {
@@ -116,6 +189,27 @@ export default function ChatPage() {
                 <div className="flex border border-neutral-200 dark:border-neutral-700 rounded-2xl overflow-hidden h-[600px]">
                     {/* Sidebar */}
                     <div className="w-72 border-r border-neutral-200 dark:border-neutral-700 bg-neutral-50/50 dark:bg-neutral-900/50 overflow-y-auto">
+                        <div className="p-3 border-b border-neutral-100 dark:border-neutral-800 space-y-2">
+                            <div className="text-[11px] font-semibold tracking-wide text-neutral-500">START NEW CHAT</div>
+                            <input
+                                type="text"
+                                value={searchUsers}
+                                onChange={(e) => setSearchUsers(e.target.value)}
+                                placeholder="Search farmers, transporters..."
+                                className="w-full px-3 py-2 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-xs text-black dark:text-white outline-none"
+                            />
+                            {chatUsers.slice(0, 4).map((u) => (
+                                <button
+                                    key={u.id}
+                                    onClick={() => startConversation(u)}
+                                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                >
+                                    <div className="text-xs font-medium text-black dark:text-white truncate">{u.name}</div>
+                                    <div className="text-[10px] text-neutral-400 uppercase tracking-wide">{u.role}</div>
+                                </button>
+                            ))}
+                        </div>
+
                         {conversations.length === 0 ? (
                             <div className="p-6 text-center text-sm text-neutral-400">No conversations yet</div>
                         ) : (

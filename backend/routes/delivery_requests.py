@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timezone
+from typing import Any
 from database import db
 from auth import get_current_user
 from utils import serialize_doc
@@ -17,6 +18,7 @@ class DeliveryRequestBody(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+    workflowMeta: dict[str, Any] | None = None
 
 
 @router.get("/delivery-requests")
@@ -117,9 +119,68 @@ async def update_delivery_request(request_id: str, body: StatusUpdate, request: 
     if doc["status"] != "pending" and str(doc.get("transporterId", "")) != user["id"]:
         raise HTTPException(status_code=403, detail="This request is already assigned to someone else")
 
+    current = doc.get("status")
+    allowed_transitions = {
+        "pending": "accepted",
+        "accepted": "in_transit",
+        "in_transit": "delivered",
+    }
+    expected_next = allowed_transitions.get(current)
+    if expected_next != body.status:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition: {current} -> {body.status}. Allowed next state is {expected_next}",
+        )
+
+    workflow_meta = body.workflowMeta or {}
+
     update: dict = {"status": body.status, "updatedAt": datetime.now(timezone.utc)}
     if body.status == "accepted":
         update["transporterId"] = ObjectId(user["id"])
+        update["acceptedAt"] = datetime.now(timezone.utc)
+
+    if body.status == "in_transit":
+        checklist = workflow_meta.get("pickupChecklist") or {}
+        route_plan = workflow_meta.get("routePlan") or {}
+        if not all(
+            [
+                checklist.get("cargoLoaded"),
+                checklist.get("documentsChecked"),
+                checklist.get("pickupVerified"),
+            ]
+        ):
+            raise HTTPException(status_code=400, detail="Pickup checklist must be fully completed before starting transit")
+        if not route_plan.get("distanceKm") or not route_plan.get("durationMinutes"):
+            raise HTTPException(status_code=400, detail="Route optimization details are required before marking in transit")
+
+        update["transitStartedAt"] = datetime.now(timezone.utc)
+        update["pickupChecklist"] = checklist
+        update["routePlan"] = {
+            "distanceKm": float(route_plan.get("distanceKm", 0)),
+            "durationMinutes": float(route_plan.get("durationMinutes", 0)),
+            "strategy": route_plan.get("strategy", ""),
+            "checkpoints": route_plan.get("checkpoints", []),
+        }
+
+    if body.status == "delivered":
+        confirmation = workflow_meta.get("deliveryConfirmation") or {}
+        receiver_name = str(confirmation.get("receiverName", "")).strip()
+        proof_note = str(confirmation.get("proofNote", "")).strip()
+        delivered_qty = confirmation.get("deliveredQuantity")
+
+        if not receiver_name:
+            raise HTTPException(status_code=400, detail="Receiver name is required before marking delivered")
+        if len(proof_note) < 8:
+            raise HTTPException(status_code=400, detail="Delivery proof note must be at least 8 characters")
+        if delivered_qty is None or float(delivered_qty) <= 0:
+            raise HTTPException(status_code=400, detail="Delivered quantity must be a positive number")
+
+        update["deliveredAt"] = datetime.now(timezone.utc)
+        update["deliveryConfirmation"] = {
+            "receiverName": receiver_name,
+            "proofNote": proof_note,
+            "deliveredQuantity": float(delivered_qty),
+        }
 
     await db.deliveryrequests.update_one(
         {"_id": ObjectId(request_id)},

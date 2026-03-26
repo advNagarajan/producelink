@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Request, HTTPException
 from bson import ObjectId
+from typing import Awaitable, Callable, cast
 from database import db
-from auth import get_current_user
+from auth import get_current_user as imported_get_current_user
 from utils import serialize_doc
+
+get_current_user = cast(Callable[[Request], Awaitable[dict]], imported_get_current_user)
 
 router = APIRouter()
 

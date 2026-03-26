@@ -12,16 +12,18 @@ Endpoints:
 
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Awaitable, Callable, cast
 
 import httpx
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from auth import get_current_user
+from auth import get_current_user as imported_get_current_user
 from config import DATA_GOV_API_KEY
 from database import db
 from utils import serialize_doc
+
+get_current_user = cast(Callable[[Request], Awaitable[dict]], imported_get_current_user)
 
 router = APIRouter()
 
@@ -144,20 +146,39 @@ async def _fetch_govt_prices(
         if state:
             params["filters[state]"] = state
 
+    data = None
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(DATA_GOV_BASE, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Government API timeout — try again")
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.get(DATA_GOV_BASE, params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break
+            except httpx.TimeoutException:
+                # Retry once before falling back to cache/error.
+                if attempt == 0:
+                    continue
+                # If upstream is slow, serve stale cache to avoid user-facing 504s.
+                if cached and cached.get("records"):
+                    return cached.get("records", [])
+                raise HTTPException(status_code=504, detail="Government API timeout — try again")
     except httpx.HTTPStatusError as exc:
+        if cached and cached.get("records"):
+            return cached.get("records", [])
         raise HTTPException(
             status_code=502,
             detail=f"Government API returned {exc.response.status_code}",
         )
     except Exception:
+        if cached and cached.get("records"):
+            return cached.get("records", [])
         raise HTTPException(status_code=502, detail="Could not reach government price API")
+
+    if data is None:
+        if cached and cached.get("records"):
+            return cached.get("records", [])
+        raise HTTPException(status_code=504, detail="Government API timeout — try again")
 
     records_raw = data.get("records", [])
 

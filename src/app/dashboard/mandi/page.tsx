@@ -9,11 +9,13 @@ import { ref, onValue } from "firebase/database";
 import AppShell from "@/components/AppShell";
 import FavoriteButton from "@/components/FavoriteButton";
 import GovtPriceBadge from "@/components/GovtPriceBadge";
+import AIOpsAssistant from "@/components/AIOpsAssistant";
 import Link from "next/link";
 
 interface Harvest {
     _id: string;
     farmerId: { _id: string; name: string };
+    farmerTrust?: { score: number; label: string };
     cropType: string;
     quantity: number;
     qualityGrade: string;
@@ -52,6 +54,13 @@ const gradeColors: Record<string, string> = {
     C: "bg-neutral-300 text-black",
     D: "bg-neutral-100 text-neutral-500",
 };
+
+function trustClass(score: number) {
+    if (score >= 85) return "bg-emerald-100 text-emerald-700";
+    if (score >= 70) return "bg-teal-100 text-teal-700";
+    if (score >= 55) return "bg-amber-100 text-amber-700";
+    return "bg-red-100 text-red-700";
+}
 
 export default function MandiDashboard() {
     const { user } = useAuth();
@@ -265,6 +274,8 @@ export default function MandiDashboard() {
                     ))}
                 </div>
 
+                <AIOpsAssistant title="Mandi AI Assistant" subtitle="Ask about active bids, accepted bids, pricing opportunities, and order flow." />
+
                 {/* BROWSE TAB */}
                 {activeTab === "browse" && (
                     <div className="space-y-6">
@@ -464,6 +475,14 @@ export default function MandiDashboard() {
                                                     <span>{harvest.quantity} kg</span>
                                                     <span className="w-0.5 h-0.5 bg-neutral-300 rounded-full" />
                                                     <span>{harvest.farmerId?.name || "Unknown"}</span>
+                                                    {harvest.farmerTrust?.score !== undefined && (
+                                                        <>
+                                                            <span className="w-0.5 h-0.5 bg-neutral-300 rounded-full" />
+                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${trustClass(harvest.farmerTrust.score)}`}>
+                                                                Trust {harvest.farmerTrust.score}
+                                                            </span>
+                                                        </>
+                                                    )}
                                                     <span className="w-0.5 h-0.5 bg-neutral-300 rounded-full" />
                                                     <span>{timeAgo(harvest.createdAt)}</span>
                                                 </div>
@@ -505,6 +524,14 @@ export default function MandiDashboard() {
                                                         <span>Total Value</span>
                                                         <span className="font-medium text-black dark:text-white">Rs {(harvest.basePrice * harvest.quantity).toLocaleString()}</span>
                                                     </div>
+                                                    {harvest.farmerTrust?.score !== undefined && (
+                                                        <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
+                                                            <span>Seller Trust Score</span>
+                                                            <span className="font-medium text-black dark:text-white">
+                                                                {harvest.farmerTrust.score}/100 ({harvest.farmerTrust.label})
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
                                                         <span>Listed</span>
                                                         <span className="text-neutral-500 dark:text-neutral-400">{new Date(harvest.createdAt).toLocaleDateString()}</span>
