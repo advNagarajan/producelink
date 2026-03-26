@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/AuthProvider";
-import DashboardHeader from "@/components/DashboardHeader";
+import AppShell from "@/components/AppShell";
 import StarRating from "@/components/StarRating";
 import Link from "next/link";
 
@@ -20,6 +20,9 @@ const BulkHarvestForm = dynamic(() => import("@/components/BulkHarvestForm"), {
     loading: () => <div className="h-40 animate-pulse bg-neutral-100 dark:bg-neutral-800 rounded-xl" />,
     ssr: false,
 });
+
+const GovtPriceBadge = dynamic(() => import("@/components/GovtPriceBadge"), { ssr: false });
+const MLPricePredictor = dynamic(() => import("@/components/MLPricePredictor"), { ssr: false });
 
 interface Bid {
     _id: string;
@@ -76,7 +79,10 @@ export default function FarmerDashboard() {
     const fetchHarvests = useCallback(async () => {
         try {
             const res = await fetch("/api/harvests");
-            if (res.ok) setHarvests(await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                setHarvests(Array.isArray(data) ? data : data.items || []);
+            }
         } catch (err) {
             console.error("Failed to fetch harvests", err);
         } finally {
@@ -243,9 +249,7 @@ export default function FarmerDashboard() {
     ];
 
     return (
-        <div className="min-h-screen bg-neutral-50 dark:bg-black">
-            <DashboardHeader />
-
+        <AppShell>
             <div className="max-w-7xl mx-auto p-6 md:p-8">
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 overflow-x-auto">
@@ -360,6 +364,15 @@ export default function FarmerDashboard() {
                                             <span className="font-semibold block mb-1">Market Insight</span>{insight}
                                         </div>
                                     )}
+                                    {formData.cropType && formData.location && (
+                                        <MLPricePredictor
+                                            cropType={formData.cropType}
+                                            location={formData.location}
+                                            quantity={Number(formData.quantity) || 100}
+                                            qualityGrade={formData.qualityGrade}
+                                            onPriceSelect={(price) => setFormData(prev => ({ ...prev, basePrice: String(price) }))}
+                                        />
+                                    )}
                                     {formError && <div className="text-red-600 text-sm">{formError}</div>}
                                     {formSuccess && <div className="text-green-700 text-sm bg-green-50 border border-green-200 rounded-lg p-2">{formSuccess}</div>}
                                     <Button type="submit" className="w-full bg-black hover:bg-neutral-800 text-white h-11 rounded-full" disabled={submitting}>
@@ -393,6 +406,7 @@ export default function FarmerDashboard() {
                                                     <div>
                                                         <div className="font-semibold text-black">{harvest.cropType}</div>
                                                         <div className="text-xs text-neutral-500">{harvest.quantity} kg at {harvest.location} -- Grade {harvest.qualityGrade}</div>
+                                                        <GovtPriceBadge harvestId={harvest._id} compact />
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-4">
@@ -479,6 +493,7 @@ export default function FarmerDashboard() {
                                                     <p className="text-sm text-neutral-500 mt-0.5">
                                                         {harvest.location} -- {harvest.quantity} kg -- Grade {harvest.qualityGrade} -- Base: Rs {harvest.basePrice}/kg -- Listed {new Date(harvest.createdAt).toLocaleDateString()}
                                                     </p>
+                                                    <GovtPriceBadge harvestId={harvest._id} />
                                                 </div>
                                             </div>
 
@@ -636,6 +651,6 @@ export default function FarmerDashboard() {
                     </div>
                 )}
             </div>
-        </div>
+        </AppShell>
     );
 }

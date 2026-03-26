@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/AuthProvider";
-import DashboardHeader from "@/components/DashboardHeader";
+import AppShell from "@/components/AppShell";
 import StarRating from "@/components/StarRating";
 import Link from "next/link";
 
@@ -68,6 +68,30 @@ export default function TransporterDashboard() {
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState<"newest" | "quantity" | "crop">("newest");
     const [ratingSubmitted, setRatingSubmitted] = useState<Record<string, boolean>>({});
+
+    const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
+    const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+
+    const fetchRouteAdvice = async (req: DeliveryRequest) => {
+        setAiLoading(prev => ({ ...prev, [req._id]: true }));
+        try {
+            const res = await fetch("/api/predict/route-advice", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    cropType: req.harvestId?.cropType || "Produce",
+                    quantity: req.harvestId?.quantity || 0,
+                    pickupLocation: req.pickupLocation,
+                    dropoffLocation: req.dropoffLocation,
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setAiAdvice(prev => ({ ...prev, [req._id]: data.advice }));
+            }
+        } catch { /* silent */ }
+        setAiLoading(prev => ({ ...prev, [req._id]: false }));
+    };
 
     const showToast = (message: string) => {
         setToast(message);
@@ -159,7 +183,7 @@ export default function TransporterDashboard() {
     ];
 
     return (
-        <div className="min-h-screen bg-neutral-50 dark:bg-black">
+        <AppShell>
             {/* Toast notification */}
             {toast && (
                 <div className="fixed top-20 right-6 z-50 bg-black dark:bg-white text-white dark:text-black px-5 py-3 rounded-2xl shadow-lg text-sm font-medium">
@@ -192,8 +216,6 @@ export default function TransporterDashboard() {
                 </div>
             )}
 
-            <DashboardHeader />
-
             <div className="max-w-7xl mx-auto px-6 md:px-8 py-8">
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 overflow-x-auto">
@@ -212,19 +234,19 @@ export default function TransporterDashboard() {
                 {loading ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="bg-white p-6 rounded-2xl border border-neutral-200 animate-pulse">
+                            <div key={i} className="bg-white dark:bg-neutral-900 p-6 rounded-2xl border border-neutral-200 dark:border-neutral-700 animate-pulse">
                                 <div className="flex justify-between mb-4">
                                     <div className="space-y-2">
-                                        <div className="h-5 w-28 bg-neutral-200 rounded" />
-                                        <div className="h-3 w-20 bg-neutral-100 rounded" />
+                                        <div className="h-5 w-28 bg-neutral-200 dark:bg-neutral-700 rounded" />
+                                        <div className="h-3 w-20 bg-neutral-100 dark:bg-neutral-800 rounded" />
                                     </div>
-                                    <div className="h-6 w-16 bg-neutral-100 rounded-full" />
+                                    <div className="h-6 w-16 bg-neutral-100 dark:bg-neutral-800 rounded-full" />
                                 </div>
                                 <div className="space-y-3">
-                                    <div className="h-12 w-full bg-neutral-50 rounded-lg" />
-                                    <div className="h-12 w-full bg-neutral-50 rounded-lg" />
+                                    <div className="h-12 w-full bg-neutral-50 dark:bg-neutral-800 rounded-lg" />
+                                    <div className="h-12 w-full bg-neutral-50 dark:bg-neutral-800 rounded-lg" />
                                 </div>
-                                <div className="h-10 mt-4 bg-neutral-100 rounded-full" />
+                                <div className="h-10 mt-4 bg-neutral-100 dark:bg-neutral-800 rounded-full" />
                             </div>
                         ))}
                     </div>
@@ -234,8 +256,8 @@ export default function TransporterDashboard() {
                         {activeTab === "overview" && (
                             <div className="space-y-8">
                                 <div>
-                                    <h1 className="text-3xl font-bold text-black">Welcome back, {user?.name?.split(" ")[0]}</h1>
-                                    <p className="text-neutral-500 mt-1">Here is your transport activity summary.</p>
+                                    <h1 className="text-3xl font-bold text-black dark:text-white">Welcome back, {user?.name?.split(" ")[0]}</h1>
+                                    <p className="text-neutral-500 dark:text-neutral-400 mt-1">Here is your transport activity summary.</p>
                                 </div>
 
                                 {/* Stats */}
@@ -249,13 +271,56 @@ export default function TransporterDashboard() {
                                         <div key={s.label}
                                             className={`p-5 rounded-2xl border transition-all duration-200
                                                 ${s.action ? "cursor-pointer hover:scale-[1.02] hover:shadow-md" : ""}
-                                                ${s.accent ? "bg-black text-white border-black" : "bg-white border-neutral-200 hover:border-neutral-300"}`}
+                                                ${s.accent ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white" : "bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600"}`}
                                             onClick={s.action}>
-                                            <div className={`text-2xl font-bold ${s.accent ? "text-white" : "text-black"}`}>{s.value}</div>
-                                            <div className={`text-sm mt-1 ${s.accent ? "text-neutral-300" : "text-neutral-500"}`}>{s.label}</div>
+                                            <div className={`text-2xl font-bold ${s.accent ? "text-white dark:text-black" : "text-black dark:text-white"}`}>{s.value}</div>
+                                            <div className={`text-sm mt-1 ${s.accent ? "text-neutral-300 dark:text-neutral-600" : "text-neutral-500 dark:text-neutral-400"}`}>{s.label}</div>
                                         </div>
                                     ))}
                                 </div>
+
+                                {/* Performance breakdown */}
+                                {requests.length > 0 && (() => {
+                                    const routes = new Set(requests.map(r => `${r.pickupLocation}→${r.dropoffLocation}`));
+                                    const crops = new Set(requests.filter(r => r.harvestId?.cropType).map(r => r.harvestId.cropType));
+                                    const completionRate = requests.length > 0 ? Math.round((completed.length / requests.length) * 100) : 0;
+                                    return (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-5">
+                                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-3 font-medium">Produce Handled</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {[...crops].slice(0, 8).map(c => (
+                                                        <span key={c} className="px-3 py-1.5 rounded-full text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white">
+                                                            {c}
+                                                        </span>
+                                                    ))}
+                                                    {crops.size === 0 && <span className="text-sm text-neutral-400">None yet</span>}
+                                                </div>
+                                            </div>
+                                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-5">
+                                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-2 font-medium">Performance</div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <div className="text-xl font-bold text-black dark:text-white tabular-nums">{completionRate}%</div>
+                                                        <div className="text-[10px] text-neutral-400">Completion Rate</div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xl font-bold text-black dark:text-white tabular-nums">{routes.size}</div>
+                                                        <div className="text-[10px] text-neutral-400">Unique Routes</div>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden">
+                                                    <div className="h-full bg-black dark:bg-white rounded-full transition-all" style={{ width: `${completionRate}%` }} />
+                                                </div>
+                                            </div>
+                                            <div className="bg-black dark:bg-white rounded-2xl p-5 text-white dark:text-black">
+                                                <div className="text-xs opacity-60 mb-2 font-medium">Lifetime Cargo</div>
+                                                <div className="text-2xl font-bold tabular-nums">{totalKgDelivered.toLocaleString()} kg</div>
+                                                <div className="text-xs opacity-50 mt-1">{completed.length} deliveries completed</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Active in-transit banner */}
                                 {active.filter(r => r.status === "in_transit").length > 0 && (
@@ -273,7 +338,7 @@ export default function TransporterDashboard() {
                                 {/* Active deliveries summary */}
                                 {active.length > 0 && (
                                     <div>
-                                        <h2 className="text-lg font-semibold text-black mb-4">Current Deliveries</h2>
+                                        <h2 className="text-lg font-semibold text-black dark:text-white mb-4">Current Deliveries</h2>
                                         <div className="space-y-3">
                                             {active.map(req => (
                                                 <ActiveDeliveryRow key={req._id} req={req}
@@ -288,7 +353,7 @@ export default function TransporterDashboard() {
                                 {pending.length > 0 && (
                                     <div>
                                         <div className="flex items-center justify-between mb-4">
-                                            <h2 className="text-lg font-semibold text-black">New Requests</h2>
+                                            <h2 className="text-lg font-semibold text-black dark:text-white">New Requests</h2>
                                             <button onClick={() => setActiveTab("available")} className="text-sm text-neutral-500 hover:text-black font-medium transition-colors">
                                                 View all ({pending.length})
                                             </button>
@@ -300,15 +365,18 @@ export default function TransporterDashboard() {
                                                     onAction={() => setConfirmAction({ id: req._id, status: "accepted", label: "Accept Request" })}
                                                     isUpdating={updating === req._id}
                                                     expanded={expandedId === req._id}
-                                                    onToggleExpand={() => setExpandedId(expandedId === req._id ? null : req._id)} />
+                                                    onToggleExpand={() => setExpandedId(expandedId === req._id ? null : req._id)}
+                                                    aiAdvice={aiAdvice[req._id]}
+                                                    aiLoading={aiLoading[req._id]}
+                                                    onAskAI={() => fetchRouteAdvice(req)} />
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
                                 {requests.length === 0 && (
-                                    <div className="bg-white p-16 rounded-2xl border border-neutral-200 text-center">
-                                        <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                                    <div className="bg-white dark:bg-neutral-900 p-16 rounded-2xl border border-neutral-200 dark:border-neutral-700 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
                                             <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                             </svg>
@@ -325,7 +393,7 @@ export default function TransporterDashboard() {
                             <div className="space-y-6">
                                 <div className="flex flex-wrap items-end justify-between gap-4">
                                     <div>
-                                        <h1 className="text-3xl font-bold text-black">Available Requests</h1>
+                                        <h1 className="text-3xl font-bold text-black dark:text-white">Available Requests</h1>
                                         <p className="text-neutral-500 mt-1">{pending.length} delivery {pending.length === 1 ? "request" : "requests"} waiting to be picked up.</p>
                                     </div>
                                 </div>
@@ -343,7 +411,7 @@ export default function TransporterDashboard() {
                                                 className="h-10 pl-10" />
                                         </div>
                                         <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                                            className="h-10 rounded-full border border-neutral-300 bg-white px-4 text-sm text-black outline-none focus:border-black transition-colors">
+                                            className="h-10 rounded-full border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 px-4 text-sm text-black dark:text-white outline-none focus:border-black dark:focus:border-white transition-colors">
                                             <option value="newest">Newest First</option>
                                             <option value="quantity">Largest Quantity</option>
                                             <option value="crop">Crop A-Z</option>
@@ -352,8 +420,8 @@ export default function TransporterDashboard() {
                                 )}
 
                                 {pending.length === 0 ? (
-                                    <div className="bg-white p-16 rounded-2xl border border-dashed border-neutral-300 text-center">
-                                        <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                                    <div className="bg-white dark:bg-neutral-900 p-16 rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-600 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
                                             <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                                             </svg>
@@ -369,7 +437,10 @@ export default function TransporterDashboard() {
                                                 onAction={() => setConfirmAction({ id: req._id, status: "accepted", label: "Accept Request" })}
                                                 isUpdating={updating === req._id}
                                                 expanded={expandedId === req._id}
-                                                onToggleExpand={() => setExpandedId(expandedId === req._id ? null : req._id)} />
+                                                onToggleExpand={() => setExpandedId(expandedId === req._id ? null : req._id)}
+                                                aiAdvice={aiAdvice[req._id]}
+                                                aiLoading={aiLoading[req._id]}
+                                                onAskAI={() => fetchRouteAdvice(req)} />
                                         ))}
                                     </div>
                                 )}
@@ -381,8 +452,8 @@ export default function TransporterDashboard() {
                             <div className="space-y-6">
                                 <div className="flex flex-wrap items-end justify-between gap-4">
                                     <div>
-                                        <h1 className="text-3xl font-bold text-black">Active Deliveries</h1>
-                                        <p className="text-neutral-500 mt-1">{active.length} {active.length === 1 ? "delivery" : "deliveries"} in progress.</p>
+                                        <h1 className="text-3xl font-bold text-black dark:text-white">Active Deliveries</h1>
+                                        <p className="text-neutral-500 dark:text-neutral-400 mt-1">{active.length} {active.length === 1 ? "delivery" : "deliveries"} in progress.</p>
                                     </div>
                                     {totalKgActive > 0 && (
                                         <div className="bg-black text-white px-5 py-3 rounded-2xl">
@@ -392,8 +463,8 @@ export default function TransporterDashboard() {
                                     )}
                                 </div>
                                 {active.length === 0 ? (
-                                    <div className="bg-white p-16 rounded-2xl border border-dashed border-neutral-300 text-center">
-                                        <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                                    <div className="bg-white dark:bg-neutral-900 p-16 rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-600 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
                                             <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                                             </svg>
@@ -422,13 +493,13 @@ export default function TransporterDashboard() {
                             <div className="space-y-6">
                                 <div className="flex flex-wrap items-end justify-between gap-4">
                                     <div>
-                                        <h1 className="text-3xl font-bold text-black">Completed Deliveries</h1>
+                                        <h1 className="text-3xl font-bold text-black dark:text-white">Completed Deliveries</h1>
                                         <p className="text-neutral-500 mt-1">{completed.length} {completed.length === 1 ? "delivery" : "deliveries"} completed.</p>
                                     </div>
                                     {completed.length > 0 && (
                                         <div className="flex gap-3">
-                                            <div className="bg-white px-5 py-3 rounded-2xl border border-neutral-200">
-                                                <div className="text-xl font-bold text-black">{completed.length}</div>
+                                            <div className="bg-white dark:bg-neutral-900 px-5 py-3 rounded-2xl border border-neutral-200 dark:border-neutral-700">
+                                                <div className="text-xl font-bold text-black dark:text-white">{completed.length}</div>
                                                 <div className="text-xs text-neutral-500">Total Trips</div>
                                             </div>
                                             <div className="bg-black text-white px-5 py-3 rounded-2xl">
@@ -439,8 +510,8 @@ export default function TransporterDashboard() {
                                     )}
                                 </div>
                                 {completed.length === 0 ? (
-                                    <div className="bg-white p-16 rounded-2xl border border-dashed border-neutral-300 text-center">
-                                        <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                                    <div className="bg-white dark:bg-neutral-900 p-16 rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-600 text-center">
+                                        <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
                                             <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                             </svg>
@@ -479,7 +550,7 @@ export default function TransporterDashboard() {
                     </>
                 )}
             </div>
-        </div>
+        </AppShell>
     );
 }
 
@@ -504,15 +575,15 @@ function ActiveDeliveryRow({
     const curIdx = steps.findIndex(s => s.key === req.status);
 
     return (
-        <div className="bg-white rounded-2xl border border-neutral-200 hover:border-neutral-300 transition-all duration-200 hover:shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 transition-all duration-200 hover:shadow-sm overflow-hidden">
             <div className="p-5">
                 <div className="flex flex-wrap justify-between items-center gap-4 mb-4">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-neutral-900 text-white flex items-center justify-center text-sm font-bold">
+                        <div className="w-11 h-11 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-black flex items-center justify-center text-sm font-bold">
                             {req.harvestId?.cropType?.charAt(0).toUpperCase() || "P"}
                         </div>
                         <div>
-                            <div className="font-semibold text-black">{req.harvestId?.cropType || "Produce"} -- {req.harvestId?.quantity} kg</div>
+                            <div className="font-semibold text-black dark:text-white">{req.harvestId?.cropType || "Produce"} -- {req.harvestId?.quantity} kg</div>
                             <div className="text-xs text-neutral-400">For: {req.requesterId?.name || "Farmer"} / {timeAgo(req.createdAt)}</div>
                         </div>
                     </div>
@@ -537,9 +608,9 @@ function ActiveDeliveryRow({
 
                 {/* Route visualization */}
                 <div className="flex items-center gap-3 mb-5">
-                    <div className="flex-1 bg-neutral-50 rounded-xl p-3">
+                    <div className="flex-1 bg-neutral-50 dark:bg-neutral-800 rounded-xl p-3">
                         <div className="text-[10px] text-neutral-400 font-medium uppercase tracking-wider mb-0.5">Pickup</div>
-                        <div className="text-sm text-black font-medium">{req.pickupLocation}</div>
+                        <div className="text-sm text-black dark:text-white font-medium">{req.pickupLocation}</div>
                     </div>
                     <div className="flex flex-col items-center gap-0.5 shrink-0">
                         <svg className="w-5 h-5 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -547,9 +618,9 @@ function ActiveDeliveryRow({
                         </svg>
                         <span className="text-[9px] text-neutral-300">{req.harvestId?.quantity} kg</span>
                     </div>
-                    <div className="flex-1 bg-neutral-50 rounded-xl p-3">
+                    <div className="flex-1 bg-neutral-50 dark:bg-neutral-800 rounded-xl p-3">
                         <div className="text-[10px] text-neutral-400 font-medium uppercase tracking-wider mb-0.5">Drop-off</div>
-                        <div className="text-sm text-black font-medium">{req.dropoffLocation}</div>
+                        <div className="text-sm text-black dark:text-white font-medium">{req.dropoffLocation}</div>
                     </div>
                 </div>
 
@@ -559,7 +630,7 @@ function ActiveDeliveryRow({
                         <div key={step.key} className="flex items-center flex-1">
                             <div className="flex flex-col items-center flex-1">
                                 <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-500
-                                    ${i <= curIdx ? "bg-black text-white" : "bg-neutral-200 text-neutral-400"}`}>
+                                    ${i <= curIdx ? "bg-black dark:bg-white text-white dark:text-black" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-400"}`}>
                                     {i < curIdx ? (
                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -567,13 +638,13 @@ function ActiveDeliveryRow({
                                     ) : i + 1}
                                 </div>
                                 {showExpanded && (
-                                    <span className={`text-[9px] mt-1 ${i <= curIdx ? "text-black font-medium" : "text-neutral-400"}`}>
+                                    <span className={`text-[9px] mt-1 ${i <= curIdx ? "text-black dark:text-white font-medium" : "text-neutral-400"}`}>
                                         {step.label}
                                     </span>
                                 )}
                             </div>
                             {i < steps.length - 1 && (
-                                <div className={`h-0.5 flex-1 -mx-1 transition-all duration-500 ${i < curIdx ? "bg-black" : "bg-neutral-200"}`} />
+                                <div className={`h-0.5 flex-1 -mx-1 transition-all duration-500 ${i < curIdx ? "bg-black dark:bg-white" : "bg-neutral-200 dark:bg-neutral-700"}`} />
                             )}
                         </div>
                     ))}
@@ -582,7 +653,7 @@ function ActiveDeliveryRow({
 
             {/* Bottom accent bar */}
             <div className={`h-1 transition-all duration-500
-                ${req.status === "in_transit" ? "bg-black" : req.status === "accepted" ? "bg-neutral-300" : "bg-neutral-100"}`} />
+                ${req.status === "in_transit" ? "bg-black dark:bg-white" : req.status === "accepted" ? "bg-neutral-300 dark:bg-neutral-600" : "bg-neutral-100 dark:bg-neutral-800"}`} />
         </div>
     );
 }
@@ -594,6 +665,9 @@ function DeliveryCard({
     isUpdating,
     expanded,
     onToggleExpand,
+    aiAdvice,
+    aiLoading,
+    onAskAI,
 }: {
     req: DeliveryRequest;
     actionLabel?: string;
@@ -601,22 +675,25 @@ function DeliveryCard({
     isUpdating?: boolean;
     expanded?: boolean;
     onToggleExpand?: () => void;
+    aiAdvice?: string;
+    aiLoading?: boolean;
+    onAskAI?: () => void;
 }) {
     const steps = ["pending", "accepted", "in_transit", "delivered"];
     const currentIndex = steps.indexOf(req.status);
 
     return (
-        <div className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col justify-between
-            ${expanded ? "border-neutral-400 shadow-md" : "border-neutral-200 hover:border-neutral-300 hover:shadow-sm"}`}>
+        <div className={`bg-white dark:bg-neutral-900 rounded-2xl border transition-all duration-300 flex flex-col justify-between
+            ${expanded ? "border-neutral-400 dark:border-neutral-500 shadow-md" : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 hover:shadow-sm"}`}>
             <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold
-                            ${req.status === "delivered" ? "bg-black text-white" : "bg-neutral-100 text-neutral-700"}`}>
+                            ${req.status === "delivered" ? "bg-black dark:bg-white text-white dark:text-black" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300"}`}>
                             {req.harvestId?.cropType?.charAt(0).toUpperCase() || "P"}
                         </div>
                         <div>
-                            <h3 className="font-semibold text-black leading-tight">
+                            <h3 className="font-semibold text-black dark:text-white leading-tight">
                                 {req.harvestId?.cropType || "Produce"}
                             </h3>
                             <p className="text-xs text-neutral-400">
@@ -632,27 +709,27 @@ function DeliveryCard({
                 {/* Route visualization */}
                 <div className="space-y-2 text-sm text-neutral-600">
                     <div className="flex items-center gap-3">
-                        <div className="flex-1 bg-neutral-50 rounded-lg p-2.5">
+                        <div className="flex-1 bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2.5">
                             <div className="text-[10px] text-neutral-400 font-medium">FROM</div>
-                            <div className="text-black text-sm font-medium truncate">{req.pickupLocation}</div>
+                            <div className="text-black dark:text-white text-sm font-medium truncate">{req.pickupLocation}</div>
                         </div>
-                        <svg className="w-4 h-4 text-neutral-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-neutral-300 dark:text-neutral-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                         </svg>
-                        <div className="flex-1 bg-neutral-50 rounded-lg p-2.5">
+                        <div className="flex-1 bg-neutral-50 dark:bg-neutral-800 rounded-lg p-2.5">
                             <div className="text-[10px] text-neutral-400 font-medium">TO</div>
-                            <div className="text-black text-sm font-medium truncate">{req.dropoffLocation}</div>
+                            <div className="text-black dark:text-white text-sm font-medium truncate">{req.dropoffLocation}</div>
                         </div>
                     </div>
                 </div>
 
                 {/* Expandable details */}
                 <div className={`overflow-hidden transition-all duration-300 ${expanded ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0"}`}>
-                    <div className="space-y-2 text-sm pt-3 border-t border-neutral-100">
+                    <div className="space-y-2 text-sm pt-3 border-t border-neutral-100 dark:border-neutral-700">
                         {req.harvestId && (
                             <div className="flex justify-between">
                                 <span className="text-neutral-400">Quantity</span>
-                                <span className="font-medium text-black">{req.harvestId.quantity} kg</span>
+                                <span className="font-medium text-black dark:text-white">{req.harvestId.quantity} kg</span>
                             </div>
                         )}
                         {req.harvestId?.location && (
@@ -668,10 +745,40 @@ function DeliveryCard({
                     </div>
                 </div>
 
+                {/* AI Route Advice */}
+                {onAskAI && (
+                    <div className="mt-3">
+                        <button
+                            onClick={onAskAI}
+                            disabled={aiLoading}
+                            className="w-full text-left px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all text-xs font-medium text-amber-700 dark:text-amber-300 flex items-center gap-2"
+                        >
+                            {aiLoading ? (
+                                <>
+                                    <span className="w-3.5 h-3.5 border-2 border-amber-400/30 border-t-amber-500 rounded-full animate-spin" />
+                                    Analyzing route...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    Get AI Route Advice
+                                </>
+                            )}
+                        </button>
+                        {aiAdvice && (
+                            <div className="mt-2 px-3 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+                                <p className="text-xs text-amber-800 dark:text-amber-200 whitespace-pre-line leading-relaxed">{aiAdvice}</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Progress bar */}
                 <div className="mt-4 flex items-center gap-1">
                     {steps.map((_, i) => (
-                        <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${i <= currentIndex ? "bg-black" : "bg-neutral-200"}`} />
+                        <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${i <= currentIndex ? "bg-black dark:bg-white" : "bg-neutral-200 dark:bg-neutral-700"}`} />
                     ))}
                 </div>
                 <div className="flex justify-between mt-1.5 text-[9px] text-neutral-400">
@@ -697,7 +804,7 @@ function DeliveryCard({
                 ) : null}
                 {onToggleExpand && (
                     <button onClick={onToggleExpand}
-                        className={`${actionLabel ? "w-10" : "w-full"} h-10 rounded-full border border-neutral-200 hover:border-neutral-400 flex items-center justify-center transition-all duration-200`}>
+                        className={`${actionLabel ? "w-10" : "w-full"} h-10 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 flex items-center justify-center transition-all duration-200`}>
                         <svg className={`w-4 h-4 text-neutral-500 transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}
                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

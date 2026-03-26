@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/components/AuthProvider";
 import { database } from "@/lib/firebase";
 import { ref, onValue } from "firebase/database";
-import DashboardHeader from "@/components/DashboardHeader";
+import AppShell from "@/components/AppShell";
 import FavoriteButton from "@/components/FavoriteButton";
+import GovtPriceBadge from "@/components/GovtPriceBadge";
 import Link from "next/link";
 
 interface Harvest {
@@ -74,6 +75,32 @@ export default function MandiDashboard() {
     const [loadingBids, setLoadingBids] = useState(false);
     const [bidFilter, setBidFilter] = useState<"all" | "pending" | "accepted" | "rejected">("all");
 
+    const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({});
+    const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+
+    const fetchBidAdvice = async (harvest: Harvest) => {
+        setAiLoading(prev => ({ ...prev, [harvest._id]: true }));
+        try {
+            const res = await fetch("/api/predict/bid-advice", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    cropType: harvest.cropType,
+                    location: harvest.location,
+                    quantity: harvest.quantity,
+                    basePrice: harvest.basePrice,
+                    qualityGrade: harvest.qualityGrade,
+                    latestBid: harvest.latestBid || null,
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setAiAdvice(prev => ({ ...prev, [harvest._id]: data.advice }));
+            }
+        } catch { /* silent */ }
+        setAiLoading(prev => ({ ...prev, [harvest._id]: false }));
+    };
+
     const showToast = (message: string, type: "success" | "error" = "success") => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 3500);
@@ -82,7 +109,10 @@ export default function MandiDashboard() {
     const fetchMarket = useCallback(async () => {
         try {
             const res = await fetch("/api/market");
-            if (res.ok) setMarketHarvests(await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                setMarketHarvests(Array.isArray(data) ? data : data.items || []);
+            }
         } catch (err) {
             console.error("Failed to fetch market data", err);
         } finally {
@@ -207,7 +237,7 @@ export default function MandiDashboard() {
     ];
 
     return (
-        <div className="min-h-screen bg-neutral-50 dark:bg-black">
+        <AppShell>
             {/* Toast notification */}
             {toast && (
                 <div className={`fixed top-20 right-6 z-50 px-5 py-3 rounded-2xl shadow-lg text-sm font-medium
@@ -216,8 +246,6 @@ export default function MandiDashboard() {
                     {toast.message}
                 </div>
             )}
-
-            <DashboardHeader />
 
             <div className="max-w-7xl mx-auto px-6 md:px-8 py-8">
                 {/* Tabs */}
@@ -243,8 +271,8 @@ export default function MandiDashboard() {
                         {/* Header + stats */}
                         <div className="flex flex-wrap items-end justify-between gap-4">
                             <div>
-                                <h1 className="text-3xl font-bold text-black">Market Dashboard</h1>
-                                <p className="text-neutral-500 mt-1">Browse available produce and place competitive bids.</p>
+                                <h1 className="text-3xl font-bold text-black dark:text-white">Market Dashboard</h1>
+                                <p className="text-neutral-500 dark:text-neutral-400 mt-1">Browse available produce and place competitive bids.</p>
                             </div>
                             <div className="flex gap-3 text-center">
                                 {[
@@ -253,13 +281,62 @@ export default function MandiDashboard() {
                                     { value: `Rs ${(totalMarketValue / 1000).toFixed(0)}k`, label: "Market Value", highlight: false },
                                 ].map(s => (
                                     <div key={s.label} className={`px-5 py-3 rounded-2xl border transition-all duration-200 hover:scale-105
-                                        ${s.highlight ? "bg-black text-white border-black" : "bg-white border-neutral-200"}`}>
-                                        <div className={`text-xl font-bold ${s.highlight ? "text-white" : "text-black"}`}>{s.value}</div>
-                                        <div className={`text-xs ${s.highlight ? "text-neutral-300" : "text-neutral-500"}`}>{s.label}</div>
+                                        ${s.highlight ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white" : "bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700"}`}>
+                                        <div className={`text-xl font-bold ${s.highlight ? "text-white dark:text-black" : "text-black dark:text-white"}`}>{s.value}</div>
+                                        <div className={`text-xs ${s.highlight ? "text-neutral-300 dark:text-neutral-600" : "text-neutral-500 dark:text-neutral-400"}`}>{s.label}</div>
                                     </div>
                                 ))}
                             </div>
                         </div>
+
+                        {/* Market Insights */}
+                        {marketHarvests.length > 0 && (() => {
+                            const cropCount: Record<string, { count: number; totalQty: number; avgPrice: number }> = {};
+                            marketHarvests.forEach(h => {
+                                if (!cropCount[h.cropType]) cropCount[h.cropType] = { count: 0, totalQty: 0, avgPrice: 0 };
+                                cropCount[h.cropType].count++;
+                                cropCount[h.cropType].totalQty += h.quantity;
+                                cropCount[h.cropType].avgPrice += h.basePrice;
+                            });
+                            const topCrops = Object.entries(cropCount)
+                                .map(([crop, d]) => ({ crop, count: d.count, qty: d.totalQty, avg: Math.round(d.avgPrice / d.count) }))
+                                .sort((a, b) => b.count - a.count)
+                                .slice(0, 6);
+                            const locations = new Set(marketHarvests.map(h => h.location));
+                            const avgPrice = Math.round(marketHarvests.reduce((s, h) => s + h.basePrice, 0) / marketHarvests.length);
+                            return (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-5">
+                                        <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-2 font-medium">Top Crops Available</div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {topCrops.map(c => (
+                                                <span key={c.crop} className="px-3 py-1.5 rounded-full text-xs font-medium bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white">
+                                                    {c.crop} <span className="text-neutral-400">({c.count})</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-5">
+                                        <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-2 font-medium">Market Overview</div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <div className="text-xl font-bold text-black dark:text-white tabular-nums">{locations.size}</div>
+                                                <div className="text-[10px] text-neutral-400">Locations</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xl font-bold text-black dark:text-white tabular-nums">Rs {avgPrice}</div>
+                                                <div className="text-[10px] text-neutral-400">Avg Price/kg</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black dark:bg-white rounded-2xl p-5 text-white dark:text-black">
+                                        <div className="text-xs opacity-60 mb-2 font-medium">Total Supply</div>
+                                        <div className="text-2xl font-bold tabular-nums">{marketHarvests.reduce((s, h) => s + h.quantity, 0).toLocaleString()} kg</div>
+                                        <div className="text-xs opacity-50 mt-1">{marketHarvests.length} listings from {locations.size} locations</div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {/* Search + sort + grade filter */}
                         <div className="space-y-3">
@@ -276,7 +353,7 @@ export default function MandiDashboard() {
                                     />
                                 </div>
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                                    className="h-10 rounded-full border border-neutral-300 bg-white px-4 text-sm text-black outline-none focus:border-black transition-colors">
+                                    className="h-10 rounded-full border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 px-4 text-sm text-black dark:text-white outline-none focus:border-black dark:focus:border-white transition-colors">
                                     <option value="newest">Newest First</option>
                                     <option value="price_low">Price: Low to High</option>
                                     <option value="price_high">Price: High to Low</option>
@@ -315,26 +392,26 @@ export default function MandiDashboard() {
                         {loading ? (
                             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
                                 {Array.from({ length: 6 }).map((_, i) => (
-                                    <div key={i} className="bg-white p-6 rounded-2xl border border-neutral-200 animate-pulse">
+                                    <div key={i} className="bg-white dark:bg-neutral-900 p-6 rounded-2xl border border-neutral-200 dark:border-neutral-700 animate-pulse">
                                         <div className="flex justify-between mb-4">
                                             <div className="space-y-2">
-                                                <div className="h-5 w-24 bg-neutral-200 rounded" />
-                                                <div className="h-3 w-16 bg-neutral-100 rounded" />
+                                                <div className="h-5 w-24 bg-neutral-200 dark:bg-neutral-700 rounded" />
+                                                <div className="h-3 w-16 bg-neutral-100 dark:bg-neutral-800 rounded" />
                                             </div>
-                                            <div className="h-7 w-20 bg-neutral-100 rounded-full" />
+                                            <div className="h-7 w-20 bg-neutral-100 dark:bg-neutral-800 rounded-full" />
                                         </div>
                                         <div className="space-y-3">
-                                            <div className="h-3 w-full bg-neutral-100 rounded" />
-                                            <div className="h-3 w-3/4 bg-neutral-100 rounded" />
-                                            <div className="h-3 w-1/2 bg-neutral-100 rounded" />
+                                            <div className="h-3 w-full bg-neutral-100 dark:bg-neutral-800 rounded" />
+                                            <div className="h-3 w-3/4 bg-neutral-100 dark:bg-neutral-800 rounded" />
+                                            <div className="h-3 w-1/2 bg-neutral-100 dark:bg-neutral-800 rounded" />
                                         </div>
-                                        <div className="h-10 mt-6 bg-neutral-100 rounded-full" />
+                                        <div className="h-10 mt-6 bg-neutral-100 dark:bg-neutral-800 rounded-full" />
                                     </div>
                                 ))}
                             </div>
                         ) : filteredHarvests.length === 0 ? (
-                            <div className="bg-white p-16 rounded-2xl border border-neutral-200 text-center">
-                                <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                            <div className="bg-white dark:bg-neutral-900 p-16 rounded-2xl border border-neutral-200 dark:border-neutral-700 text-center">
+                                <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
                                     <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
@@ -358,8 +435,8 @@ export default function MandiDashboard() {
 
                                     return (
                                         <div key={harvest._id}
-                                            className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col justify-between
-                                                ${isBidding ? "border-black shadow-lg ring-1 ring-black/5" : "border-neutral-200 hover:border-neutral-300 hover:shadow-md"}`}>
+                                            className={`bg-white dark:bg-neutral-900 rounded-2xl border transition-all duration-300 flex flex-col justify-between
+                                                ${isBidding ? "border-black dark:border-white shadow-lg ring-1 ring-black/5 dark:ring-white/10" : "border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 hover:shadow-md"}`}>
                                             {/* Card header - always visible, clickable to expand */}
                                             <div className="p-6 pb-0">
                                                 <div className="flex justify-between items-start mb-3">
@@ -369,7 +446,7 @@ export default function MandiDashboard() {
                                                             {harvest.qualityGrade || "?"}
                                                         </div>
                                                         <div>
-                                                            <h3 className="font-semibold text-lg text-black leading-tight">{harvest.cropType}</h3>
+                                                            <h3 className="font-semibold text-lg text-black dark:text-white leading-tight">{harvest.cropType}</h3>
                                                             <p className="text-xs text-neutral-400">{harvest.location}</p>
                                                         </div>
                                                     </div>
@@ -413,28 +490,29 @@ export default function MandiDashboard() {
                                                     <span className="text-[10px] text-neutral-300">
                                                         Rs {(harvest.basePrice * harvest.quantity).toLocaleString()} total
                                                     </span>
+                                                    <GovtPriceBadge harvestId={harvest._id} compact />
                                                 </div>
                                             </div>
 
                                             {/* Expandable details */}
                                             <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? "max-h-48 opacity-100" : "max-h-0 opacity-0"}`}>
                                                 <div className="px-6 pb-1 space-y-2 text-sm">
-                                                    <div className="flex justify-between text-neutral-600">
+                                                    <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
                                                         <span>Quality Grade</span>
-                                                        <span className="font-medium text-black">Grade {harvest.qualityGrade}</span>
+                                                        <span className="font-medium text-black dark:text-white">Grade {harvest.qualityGrade}</span>
                                                     </div>
-                                                    <div className="flex justify-between text-neutral-600">
+                                                    <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
                                                         <span>Total Value</span>
-                                                        <span className="font-medium text-black">Rs {(harvest.basePrice * harvest.quantity).toLocaleString()}</span>
+                                                        <span className="font-medium text-black dark:text-white">Rs {(harvest.basePrice * harvest.quantity).toLocaleString()}</span>
                                                     </div>
-                                                    <div className="flex justify-between text-neutral-600">
+                                                    <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
                                                         <span>Listed</span>
-                                                        <span className="text-neutral-500">{new Date(harvest.createdAt).toLocaleDateString()}</span>
+                                                        <span className="text-neutral-500 dark:text-neutral-400">{new Date(harvest.createdAt).toLocaleDateString()}</span>
                                                     </div>
                                                     {harvest.latestBid && (
-                                                        <div className="flex justify-between text-neutral-600">
+                                                        <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
                                                             <span>Highest Bid</span>
-                                                            <span className="font-bold text-black">Rs {harvest.latestBid}/kg</span>
+                                                            <span className="font-bold text-black dark:text-white">Rs {harvest.latestBid}/kg</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -453,9 +531,31 @@ export default function MandiDashboard() {
                                                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDropoffLocation(e.target.value)}
                                                             className="h-10 rounded-xl" />
                                                         {totalCost > 0 && (
-                                                            <div className="bg-neutral-50 rounded-xl px-4 py-2.5 flex justify-between text-sm">
-                                                                <span className="text-neutral-500">Total Cost ({harvest.quantity} kg)</span>
-                                                                <span className="font-bold text-black">Rs {totalCost.toLocaleString()}</span>
+                                                            <div className="bg-neutral-50 dark:bg-neutral-800 rounded-xl px-4 py-2.5 flex justify-between text-sm">
+                                                                <span className="text-neutral-500 dark:text-neutral-400">Total Cost ({harvest.quantity} kg)</span>
+                                                                <span className="font-bold text-black dark:text-white">Rs {totalCost.toLocaleString()}</span>
+                                                            </div>
+                                                        )}
+                                                        {/* AI Bid Advice */}
+                                                        <button
+                                                            onClick={() => fetchBidAdvice(harvest)}
+                                                            disabled={aiLoading[harvest._id]}
+                                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-neutral-300 dark:border-neutral-600 hover:border-neutral-400 dark:hover:border-neutral-500 text-sm text-neutral-600 dark:text-neutral-300 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                                                            {aiLoading[harvest._id] ? (
+                                                                <>
+                                                                    <span className="w-3.5 h-3.5 border-2 border-neutral-300 dark:border-neutral-500 border-t-neutral-600 dark:border-t-neutral-200 rounded-full animate-spin" />
+                                                                    Getting AI advice...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                                                                    {aiAdvice[harvest._id] ? "Refresh AI Advice" : "Get AI Bid Suggestion"}
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                        {aiAdvice[harvest._id] && (
+                                                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-xs text-amber-900 dark:text-amber-200 leading-relaxed whitespace-pre-line">
+                                                                {aiAdvice[harvest._id]}
                                                             </div>
                                                         )}
                                                         <Button className="w-full bg-black hover:bg-neutral-800 text-white rounded-full h-10 transition-all duration-200" disabled={submittingBid}
@@ -480,7 +580,7 @@ export default function MandiDashboard() {
                                                             Place a Bid
                                                         </Button>
                                                         <button onClick={() => setExpandedCardId(isExpanded ? null : harvest._id)}
-                                                            className="w-10 h-10 rounded-full border border-neutral-200 hover:border-neutral-400 flex items-center justify-center transition-all duration-200">
+                                                            className="w-10 h-10 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-400 dark:hover:border-neutral-500 flex items-center justify-center transition-all duration-200">
                                                             <svg className={`w-4 h-4 text-neutral-500 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
                                                                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -502,8 +602,8 @@ export default function MandiDashboard() {
                     <div className="space-y-6">
                         <div className="flex flex-wrap items-end justify-between gap-4">
                             <div>
-                                <h1 className="text-3xl font-bold text-black">My Bids</h1>
-                                <p className="text-neutral-500 mt-1">Track all bids you have placed across the marketplace.</p>
+                                <h1 className="text-3xl font-bold text-black dark:text-white">My Bids</h1>
+                                <p className="text-neutral-500 dark:text-neutral-400 mt-1">Track all bids you have placed across the marketplace.</p>
                             </div>
                             {myBids.length > 0 && totalBidValue > 0 && (
                                 <div className="bg-black text-white px-5 py-3 rounded-2xl">
@@ -516,8 +616,8 @@ export default function MandiDashboard() {
                         {loadingBids ? (
                             <div className="space-y-3">
                                 {Array.from({ length: 4 }).map((_, i) => (
-                                    <div key={i} className="bg-white rounded-2xl border border-neutral-200 p-5 animate-pulse flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-neutral-200" />
+                                    <div key={i} className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-5 animate-pulse flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-neutral-200 dark:bg-neutral-700" />
                                         <div className="flex-1 space-y-2">
                                             <div className="h-4 w-32 bg-neutral-200 rounded" />
                                             <div className="h-3 w-48 bg-neutral-100 rounded" />
@@ -527,8 +627,8 @@ export default function MandiDashboard() {
                                 ))}
                             </div>
                         ) : myBids.length === 0 ? (
-                            <div className="bg-white p-16 rounded-2xl border border-neutral-200 text-center">
-                                <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                            <div className="bg-white dark:bg-neutral-900 p-16 rounded-2xl border border-neutral-200 dark:border-neutral-700 text-center">
+                                <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto mb-4">
                                     <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
@@ -616,6 +716,6 @@ export default function MandiDashboard() {
                     </div>
                 )}
             </div>
-        </div>
+        </AppShell>
     );
 }

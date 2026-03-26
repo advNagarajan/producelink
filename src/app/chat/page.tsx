@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import AppShell from "@/components/AppShell";
 
 interface Conversation {
     userId: string;
@@ -99,24 +99,18 @@ export default function ChatPage() {
     };
 
     if (authLoading) {
-        return <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center text-neutral-400">Loading...</div>;
+        return <div className="min-h-screen bg-neutral-50 dark:bg-black flex items-center justify-center text-neutral-400">Loading...</div>;
     }
 
     if (!user) {
-        return <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center text-neutral-400">Please log in to access messages</div>;
+        return <div className="min-h-screen bg-neutral-50 dark:bg-black flex items-center justify-center text-neutral-400">Please log in to access messages</div>;
     }
 
     const selectedUser = conversations.find((c) => c.userId === selected);
 
-    const router = useRouter();
-
     return (
-        <div className="min-h-screen bg-white dark:bg-black">
-            <div className="max-w-5xl mx-auto px-4 py-8">
-                <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-black dark:hover:text-white transition-colors mb-4">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                    Back
-                </button>
+        <AppShell>
+            <div className="max-w-5xl mx-auto px-6 md:px-8 py-8">
                 <h1 className="text-2xl font-bold text-black dark:text-white mb-6">Messages</h1>
 
                 <div className="flex border border-neutral-200 dark:border-neutral-700 rounded-2xl overflow-hidden h-[600px]">
@@ -207,6 +201,6 @@ export default function ChatPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </AppShell>
     );
 }

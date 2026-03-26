@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
     LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import AppShell from "@/components/AppShell";
 
 interface PricePoint {
     date: string;
@@ -45,15 +45,9 @@ export default function AnalyticsPage() {
             .finally(() => setLoading(false));
     }, [crop]);
 
-    const router = useRouter();
-
     return (
-        <div className="min-h-screen bg-white dark:bg-black">
-            <div className="max-w-6xl mx-auto px-4 py-8">
-                <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-black dark:hover:text-white transition-colors mb-4">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                    Back
-                </button>
+        <AppShell>
+            <div className="max-w-6xl mx-auto px-6 md:px-8 py-8">
                 <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Price Analytics</h1>
                 <p className="text-sm text-neutral-500 mb-8">Market price trends and crop performance data</p>
 
@@ -165,6 +159,6 @@ export default function AnalyticsPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </AppShell>
     );
 }

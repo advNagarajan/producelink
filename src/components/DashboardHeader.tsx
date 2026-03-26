@@ -10,7 +10,7 @@ export default function DashboardHeader() {
     if (!user) return null;
 
     return (
-        <header className="sticky top-0 z-40 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-neutral-200 dark:border-neutral-800">
+        <header className="bg-white dark:bg-black border-b border-neutral-200 dark:border-neutral-800">
             <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
                 <Link href="/dashboard" className="text-lg font-bold tracking-tight text-black dark:text-white">
                     ProduceLink
@@ -19,6 +19,7 @@ export default function DashboardHeader() {
                 <nav className="hidden sm:flex items-center gap-5 text-sm text-neutral-500">
                     <Link href="/marketplace" className="hover:text-black dark:hover:text-white transition-colors">Market</Link>
                     <Link href="/analytics" className="hover:text-black dark:hover:text-white transition-colors">Analytics</Link>
+                    <Link href="/govt-prices" className="hover:text-black dark:hover:text-white transition-colors">Govt Prices</Link>
                     <Link href="/chat" className="hover:text-black dark:hover:text-white transition-colors">Messages</Link>
                     <Link href={`/profile/${user.id}`} className="hover:text-black dark:hover:text-white transition-colors">Profile</Link>
                 </nav>

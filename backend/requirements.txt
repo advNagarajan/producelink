@@ -4,5 +4,6 @@ motor
 python-jose[cryptography]
 bcrypt
 python-dotenv
-google-generativeai
 httpx
+scikit-learn
+numpy

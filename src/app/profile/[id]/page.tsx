@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation";
 import StarRating from "@/components/StarRating";
+import AppShell from "@/components/AppShell";
 
 interface ProfileData {
     _id: string;
@@ -27,7 +27,6 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [activities, setActivities] = useState<Activity[]>([]);
     const [loading, setLoading] = useState(true);
-    const router = useRouter();
 
     useEffect(() => {
         Promise.all([
@@ -44,7 +43,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center text-neutral-400">
+            <div className="min-h-screen bg-neutral-50 dark:bg-black flex items-center justify-center text-neutral-400">
                 Loading profile...
             </div>
         );
@@ -52,7 +51,7 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
 
     if (!profile) {
         return (
-            <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center text-neutral-400">
+            <div className="min-h-screen bg-neutral-50 dark:bg-black flex items-center justify-center text-neutral-400">
                 Profile not found
             </div>
         );
@@ -61,12 +60,8 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
     const roleLabel = { farmer: "Farmer", mandi: "Mandi Dealer", transporter: "Transporter" }[profile.role] || profile.role;
 
     return (
-        <div className="min-h-screen bg-white dark:bg-black">
-            <div className="max-w-3xl mx-auto px-4 py-8">
-                <button onClick={() => router.back()} className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-black dark:hover:text-white transition-colors mb-4">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                    Back
-                </button>
+        <AppShell>
+            <div className="max-w-3xl mx-auto px-6 md:px-8 py-8">
                 {/* Header card */}
                 <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-6 mb-6">
                     <div className="flex items-start justify-between">
@@ -131,6 +126,6 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
                     )}
                 </div>
             </div>
-        </div>
+        </AppShell>
     );
 }

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routes import auth, harvests, bids, delivery_requests, market, predict
 from routes import notifications, ratings, chat, favorites, profile, invoice, weather, bulk_harvest, analytics
+from routes import govt_prices, price_model
 
 app = FastAPI(title="ProduceLink API")
 
@@ -41,6 +42,8 @@ app.include_router(invoice.router, prefix="/api", tags=["invoice"])
 app.include_router(weather.router, prefix="/api", tags=["weather"])
 app.include_router(bulk_harvest.router, prefix="/api", tags=["bulk_harvest"])
 app.include_router(analytics.router, prefix="/api", tags=["analytics"])
+app.include_router(govt_prices.router, prefix="/api", tags=["govt_prices"])
+app.include_router(price_model.router, prefix="/api", tags=["price_model"])
 
 
 @app.get("/")

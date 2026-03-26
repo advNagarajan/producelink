@@ -1,3 +1,4 @@
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import MONGODB_URI
 
@@ -8,6 +9,7 @@ client = AsyncIOMotorClient(
     minPoolSize=10,  # Minimum number of connections to maintain
     maxIdleTimeMS=45000,  # Close connections after 45 seconds of inactivity
     serverSelectionTimeoutMS=5000,  # Timeout for selecting a server
+    tlsCAFile=certifi.where(),
 )
 
 _db_name = MONGODB_URI.rsplit("/", 1)[-1].split("?")[0] if "/" in MONGODB_URI else "producelink"
